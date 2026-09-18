@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,10 +17,18 @@ import { ResponseCode } from '../response-code';
 
 @Catch()
 export class ResponseEnvelopeFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ResponseEnvelopeFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    // Anything that isn't a deliberately-thrown HttpException is unexpected —
+    // log it with a stack trace, or a real bug becomes an unexplained 500.
+    if (!(exception instanceof HttpException)) {
+      this.logger.error(exception instanceof Error ? exception.stack : exception);
+    }
 
     const body: ResponseEnvelope<null> = {
       requestSuccessful: false,

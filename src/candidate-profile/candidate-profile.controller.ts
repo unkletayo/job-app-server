@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.service';
@@ -18,5 +18,11 @@ export class CandidateProfileController {
   @Put()
   upsert(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpsertCandidateProfileDto) {
     return this.candidateProfileService.upsert(user.id, dto);
+  }
+
+  @Delete()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.candidateProfileService.remove(user.id);
   }
 }

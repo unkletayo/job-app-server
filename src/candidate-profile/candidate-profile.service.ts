@@ -22,4 +22,11 @@ export class CandidateProfileService {
       update: dto,
     });
   }
+
+  async remove(userId: string): Promise<void> {
+    const { count } = await this.prisma.candidateProfile.deleteMany({ where: { userId } });
+    if (count === 0) {
+      throw new NotFoundException('Candidate profile has not been created yet.');
+    }
+  }
 }

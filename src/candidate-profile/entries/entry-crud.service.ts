@@ -16,8 +16,8 @@ export interface EntryDelegate<TEntry> {
   create(args: { data: any }): Promise<TEntry>;
   findMany(args: { where: { userId: string } }): Promise<TEntry[]>;
   findFirst(args: { where: { id: string; userId: string } }): Promise<TEntry | null>;
-  update(args: { where: { id: string }; data: any }): Promise<TEntry>;
-  delete(args: { where: { id: string } }): Promise<TEntry>;
+  updateMany(args: { where: { id: string; userId: string }; data: any }): Promise<{ count: number }>;
+  deleteMany(args: { where: { id: string; userId: string } }): Promise<{ count: number }>;
 }
 
 /**
@@ -46,13 +46,23 @@ export class EntryCrudService<TEntry extends EntryRecord> {
     return entry;
   }
 
+  // updateMany/deleteMany (not update/delete) so the ownership check is part
+  // of the mutating query itself, atomically — not a separate read beforehand
+  // that a future code path could skip. A future write path that goes through
+  // this class inherits the guard by construction; one that bypasses it
+  // entirely is a different, visible problem (not this one).
   protected async performUpdate(userId: string, id: string, data: object): Promise<TEntry> {
-    await this.findOne(userId, id);
-    return this.delegate.update({ where: { id }, data });
+    const { count } = await this.delegate.updateMany({ where: { id, userId }, data });
+    if (count === 0) {
+      throw new NotFoundException('Entry not found.');
+    }
+    return this.findOne(userId, id);
   }
 
   async remove(userId: string, id: string): Promise<void> {
-    await this.findOne(userId, id);
-    await this.delegate.delete({ where: { id } });
+    const { count } = await this.delegate.deleteMany({ where: { id, userId } });
+    if (count === 0) {
+      throw new NotFoundException('Entry not found.');
+    }
   }
 }
