@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
-const PRISMA_UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
+const PRISMA_TRANSACTION_WRITE_CONFLICT = 'P2034';
 
 export interface AuthenticatedUser {
   id: string;
@@ -23,26 +23,31 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthenticatedUser> {
-    // Fast, friendly rejection for the common case. Not the actual guard —
-    // two concurrent requests can both pass this check before either commits.
-    const existingUserCount = await this.prisma.user.count();
-    if (existingUserCount > 0) {
-      throw new ConflictException('This instance already has a local user.');
-    }
-
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
     try {
-      const user = await this.prisma.user.create({
-        data: { email: dto.email, passwordHash },
-      });
+      // Serializable isolation is the actual guard: if two requests both read
+      // "no user yet" concurrently, the database aborts one of them on commit
+      // (P2034) rather than letting both inserts through. This intentionally
+      // doesn't use a schema-level cap on row count — the users table must stay
+      // able to hold more than one row for multi-user to work later, per
+      // 0005-solo-first-forward-compatible-ownership. The single-user rule is
+      // an application policy enforced here, not a structural limit.
+      const user = await this.prisma.$transaction(
+        async (tx) => {
+          const existingUserCount = await tx.user.count();
+          if (existingUserCount > 0) {
+            throw new ConflictException('This instance already has a local user.');
+          }
+          return tx.user.create({ data: { email: dto.email, passwordHash } });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
       return { id: user.id, email: user.email };
     } catch (error) {
-      // The `singleton` unique constraint is the real guard: only one row can
-      // ever exist, so a losing concurrent request lands here, not above.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === PRISMA_UNIQUE_CONSTRAINT_VIOLATION
+        error.code === PRISMA_TRANSACTION_WRITE_CONFLICT
       ) {
         throw new ConflictException('This instance already has a local user.');
       }

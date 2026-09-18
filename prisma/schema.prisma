@@ -13,10 +13,6 @@ model User {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
-  // Always 1, unique — a DB-enforced singleton guard so concurrent registrations
-  // can never both pass the application-level "no user yet" check and insert
-  // two rows. Never read or set explicitly outside this constraint's purpose.
-  singleton    Int      @unique @default(1)
 
   @@map("users")
 }
