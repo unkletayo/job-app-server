@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { CandidateProfileModule } from './candidate-profile/candidate-profile.module';
+import { JobPreferencesModule } from './job-preferences/job-preferences.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { CandidateProfileModule } from './candidate-profile/candidate-profile.mo
     PrismaModule,
     AuthModule,
     CandidateProfileModule,
+    JobPreferencesModule,
   ],
 })
 export class AppModule {}

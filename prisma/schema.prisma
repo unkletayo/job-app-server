@@ -15,6 +15,7 @@ model User {
   createdAt    DateTime @default(now())
 
   candidateProfile CandidateProfile?
+  jobPreferences   JobPreferences?
   experiences      Experience[]
   education        Education[]
   certifications   Certification[]
@@ -45,6 +46,35 @@ model CandidateProfile {
   createdAt           DateTime @default(now())
 
   @@map("candidate_profiles")
+}
+
+// Job Preferences (CONTEXT.md): the user's configured search criteria that
+// gate Job Discovery and score Matching. Singleton per user, like
+// CandidateProfile — but unlike it, GET auto-creates defaults rather than
+// 404ing, since discovery/matching (later tickets) should always have
+// something to read even before the user has customized anything.
+model JobPreferences {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetRoles           String[] @default([])
+  seniority             String[] @default([])
+  locations             String[] @default([])
+  remotePreference      Boolean  @default(false)
+  hybridPreference      Boolean  @default(false)
+  minimumSalaryAmount   Int?
+  minimumSalaryCurrency String?
+  employmentTypes       String[] @default([])
+  requiredTechnologies  String[] @default([])
+  preferredTechnologies String[] @default([])
+  excludedCompanies     String[] @default([])
+  excludedTitles        String[] @default([])
+  keywords              String[] @default([])
+  negativeKeywords      String[] @default([])
+  lastUpdated           DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  @@map("job_preferences")
 }
 
 model Experience {
