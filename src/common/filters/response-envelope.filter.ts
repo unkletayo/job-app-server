@@ -1,6 +1,18 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  Catch,
+  ConflictException,
+  ExceptionFilter,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { ResponseEnvelope } from '../response-envelope';
+import { ResponseCode } from '../response-code';
 
 @Catch()
 export class ResponseEnvelopeFilter implements ExceptionFilter {
@@ -12,12 +24,23 @@ export class ResponseEnvelopeFilter implements ExceptionFilter {
     const body: ResponseEnvelope<null> = {
       requestSuccessful: false,
       responseMessage: extractMessage(exception),
-      responseCode: String(status),
+      responseCode: resolveResponseCode(exception),
       responseBody: null,
     };
 
     response.status(status).json(body);
   }
+}
+
+// Maps exception scenarios to the defined ResponseCode vocabulary — never the
+// raw HTTP status number, so the code stays stable even if a status changes.
+function resolveResponseCode(exception: unknown): ResponseCode {
+  if (exception instanceof BadRequestException) return ResponseCode.VALIDATION_ERROR;
+  if (exception instanceof UnauthorizedException) return ResponseCode.UNAUTHORIZED;
+  if (exception instanceof ForbiddenException) return ResponseCode.FORBIDDEN;
+  if (exception instanceof NotFoundException) return ResponseCode.NOT_FOUND;
+  if (exception instanceof ConflictException) return ResponseCode.CONFLICT;
+  return ResponseCode.INTERNAL_ERROR;
 }
 
 function extractMessage(exception: unknown): string {

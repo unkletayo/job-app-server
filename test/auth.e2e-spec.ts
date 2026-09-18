@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { configureApp } from '../src/configure-app';
+import { ResponseCode } from '../src/common/response-code';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -46,7 +47,7 @@ describe('Auth (e2e)', () => {
     expect(response.body).toMatchObject({
       requestSuccessful: true,
       responseMessage: 'success',
-      responseCode: '0',
+      responseCode: ResponseCode.SUCCESS,
     });
     expect(response.body.responseBody).toMatchObject({ email: credentials.email });
     expect(response.body.responseBody.passwordHash).toBeUndefined();
@@ -66,7 +67,7 @@ describe('Auth (e2e)', () => {
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
       requestSuccessful: false,
-      responseCode: '409',
+      responseCode: ResponseCode.CONFLICT,
       responseBody: null,
     });
     expect(typeof response.body.responseMessage).toBe('string');
@@ -81,7 +82,10 @@ describe('Auth (e2e)', () => {
 
     const badLogin = await loginUser({ email: credentials.email, password: 'wrong-password' });
     expect(badLogin.status).toBe(401);
-    expect(badLogin.body.requestSuccessful).toBe(false);
+    expect(badLogin.body).toMatchObject({
+      requestSuccessful: false,
+      responseCode: ResponseCode.UNAUTHORIZED,
+    });
   });
 
   it('protects /auth/me and accepts a valid token', async () => {
