@@ -62,7 +62,6 @@ describe('Job Postings — manual paste (e2e)', () => {
       description: paste.description,
       location: ['Remote'],
       applicationUrl: paste.url,
-      source: 'manual_paste',
       skills: [],
       requirements: [],
     });
@@ -73,8 +72,10 @@ describe('Job Postings — manual paste (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(detail.status).toBe(200);
-    expect(detail.body.responseBody.sourcePosting.rawData).toEqual(paste);
-    expect(detail.body.responseBody.sourcePosting.source).toBe('manual_paste');
+    const sourcePostings = detail.body.responseBody.jobCluster.sourcePostings;
+    expect(sourcePostings).toHaveLength(1);
+    expect(sourcePostings[0].rawData).toEqual(paste);
+    expect(sourcePostings[0].source).toBe('manual_paste');
   });
 
   it('stores and normalizes prompt-injection-style content as inert data', async () => {
@@ -101,7 +102,7 @@ describe('Job Postings — manual paste (e2e)', () => {
     const detail = await request(app.getHttpServer())
       .get(`/job-postings/${id}`)
       .set('Authorization', `Bearer ${token}`);
-    expect(detail.body.responseBody.sourcePosting.rawData).toEqual(maliciousPaste);
+    expect(detail.body.responseBody.jobCluster.sourcePostings[0].rawData).toEqual(maliciousPaste);
     expect(detail.body.responseBody.description).toBe(maliciousPaste.description);
   });
 

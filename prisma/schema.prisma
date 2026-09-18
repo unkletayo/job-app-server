@@ -24,63 +24,85 @@ model User {
   achievements     Achievement[]
   links            Link[]
   sourcePostings   SourcePosting[]
+  jobClusters      JobCluster[]
   jobPostings      JobPosting[]
 
   @@map("users")
 }
 
+// A group of Source Postings that represent the same real-world job
+// (CONTEXT.md), collapsed into one canonical Job Posting. Deduplication
+// signals are decided in 0003-deterministic-first-matching — company,
+// title, location, canonical application URL, external job ID.
+model JobCluster {
+  id             String          @id @default(uuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourcePostings SourcePosting[]
+  jobPosting     JobPosting?
+  createdAt      DateTime        @default(now())
+  lastUpdated    DateTime        @updatedAt
+
+  @@index([userId])
+  @@map("job_clusters")
+}
+
 // The raw, as-fetched data for a job from a single source (CONTEXT.md).
 // Never mutated after creation — normalization reads from this, it doesn't
 // write back to it. rawData is exactly what the source/adapter received.
+// Belongs to a JobCluster — the cluster's sourcePostings are how a Job
+// Posting exposes where it actually came from, possibly more than one place.
 model SourcePosting {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  source      String
-  sourceJobId String
-  rawData     Json
-  fetchedAt   DateTime @default(now())
-
-  jobPosting JobPosting?
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobClusterId String
+  jobCluster   JobCluster @relation(fields: [jobClusterId], references: [id], onDelete: Cascade)
+  source       String
+  sourceJobId  String
+  rawData      Json
+  fetchedAt    DateTime   @default(now())
 
   @@index([userId])
+  @@index([jobClusterId])
   @@map("source_postings")
 }
 
-// The canonical, normalized Job Posting (CONTEXT.md) — one per SourcePosting
-// in this ticket; Job Cluster merging of multiple SourcePostings into one
-// Job Posting is ticket 05, not this one. Field set follows PRD §9, with
-// salary flattened into salaryMin/salaryMax/salaryCurrency scalars rather
-// than PRD's nested { min, max, currency } object — same data, flat columns.
+// The canonical, normalized Job Posting (CONTEXT.md) — one per JobCluster,
+// not one per SourcePosting (that 1:1 was ticket 04's simplification before
+// dedup existed). Field set follows PRD §9, with salary flattened into
+// salaryMin/salaryMax/salaryCurrency scalars rather than PRD's nested
+// { min, max, currency } object — same data, flat columns. No source/
+// sourceJobId fields here: a cluster can hold postings from more than one
+// source, so a single source/id pair on the canonical posting would be
+// misleading — that provenance lives on each SourcePosting instead.
 model JobPosting {
-  id                      String        @id @default(uuid())
+  id                      String     @id @default(uuid())
   userId                  String
-  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourcePostingId         String        @unique
-  sourcePosting           SourcePosting @relation(fields: [sourcePostingId], references: [id], onDelete: Cascade)
-  source                  String
-  sourceJobId             String
+  user                    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobClusterId            String     @unique
+  jobCluster              JobCluster @relation(fields: [jobClusterId], references: [id], onDelete: Cascade)
   company                 String
   title                   String
   description             String
-  location                String[]      @default([])
+  location                String[]   @default([])
   remoteType              String?
   employmentType          String?
   salaryMin               Int?
   salaryMax               Int?
   salaryCurrency          String?
   seniority               String?
-  skills                  String[]      @default([])
-  requirements            String[]      @default([])
-  preferredQualifications String[]      @default([])
-  educationRequirements   String[]      @default([])
-  experienceRequirements  String[]      @default([])
+  skills                  String[]   @default([])
+  requirements            String[]   @default([])
+  preferredQualifications String[]   @default([])
+  educationRequirements   String[]   @default([])
+  experienceRequirements  String[]   @default([])
   applicationUrl          String?
   postedAt                DateTime?
   deadline                DateTime?
   sourceUpdatedAt         DateTime?
-  lastUpdated             DateTime      @updatedAt
-  createdAt               DateTime      @default(now())
+  lastUpdated             DateTime   @updatedAt
+  createdAt               DateTime   @default(now())
 
   @@index([userId])
   @@map("job_postings")
