@@ -1,0 +1,3 @@
+# LLM Gateway as a provider abstraction, Claude wired first
+
+All LLM calls (future matching reasoning, resume/cover-letter/question generation) go through an internal LLM Gateway interface rather than calling the Anthropic SDK directly from feature code. Claude is the only provider wired up today, but the user wants to be able to swap or add providers later without touching matching/generation logic. Per PRD §61 ("LLM gateway: provider abstraction") and §54 (cheap model for classification, stronger model for analysis) — model selection is a gateway-level routing decision, not something scattered across call sites.
