@@ -8,6 +8,16 @@ describe('Auth (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
+  const credentials = { email: 'user@example.com', password: 'correct-horse-battery-staple' };
+
+  function registerUser(body: { email: string; password: string } = credentials) {
+    return request(app.getHttpServer()).post('/auth/register').send(body);
+  }
+
+  function loginUser(body: { email: string; password: string } = credentials) {
+    return request(app.getHttpServer()).post('/auth/login').send(body);
+  }
+
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -29,58 +39,41 @@ describe('Auth (e2e)', () => {
   });
 
   it('registers the first local user', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email: 'user@example.com', password: 'correct-horse-battery-staple' });
+    const response = await registerUser();
 
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ email: 'user@example.com' });
+    expect(response.body).toMatchObject({ email: credentials.email });
     expect(response.body.passwordHash).toBeUndefined();
     expect(response.body.password).toBeUndefined();
   });
 
   it('refuses to register a second user', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email: 'first@example.com', password: 'correct-horse-battery-staple' })
-      .expect(201);
+    await registerUser({ email: 'first@example.com', password: 'correct-horse-battery-staple' }).expect(
+      201,
+    );
 
-    const response = await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email: 'second@example.com', password: 'another-password-here' });
+    const response = await registerUser({
+      email: 'second@example.com',
+      password: 'another-password-here',
+    });
 
     expect(response.status).toBe(409);
   });
 
   it('logs in with correct credentials and rejects wrong ones', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email: 'user@example.com', password: 'correct-horse-battery-staple' })
-      .expect(201);
+    await registerUser().expect(201);
 
-    const goodLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: 'user@example.com', password: 'correct-horse-battery-staple' });
-
+    const goodLogin = await loginUser();
     expect(goodLogin.status).toBe(200);
     expect(typeof goodLogin.body.accessToken).toBe('string');
 
-    const badLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: 'user@example.com', password: 'wrong-password' });
-
+    const badLogin = await loginUser({ email: credentials.email, password: 'wrong-password' });
     expect(badLogin.status).toBe(401);
   });
 
   it('protects /auth/me and accepts a valid token', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email: 'user@example.com', password: 'correct-horse-battery-staple' })
-      .expect(201);
-
-    const login = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: 'user@example.com', password: 'correct-horse-battery-staple' });
+    await registerUser().expect(201);
+    const login = await loginUser();
 
     const unauthorized = await request(app.getHttpServer()).get('/auth/me');
     expect(unauthorized.status).toBe(401);
@@ -90,6 +83,6 @@ describe('Auth (e2e)', () => {
       .set('Authorization', `Bearer ${login.body.accessToken}`);
 
     expect(authorized.status).toBe(200);
-    expect(authorized.body).toMatchObject({ email: 'user@example.com' });
+    expect(authorized.body).toMatchObject({ email: credentials.email });
   });
 });
