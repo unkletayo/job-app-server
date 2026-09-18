@@ -1,8 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { configureApp } from '../src/configure-app';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -24,7 +25,7 @@ describe('Auth (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    configureApp(app);
     await app.init();
 
     prisma = moduleRef.get(PrismaService);
@@ -38,16 +39,21 @@ describe('Auth (e2e)', () => {
     await prisma.user.deleteMany();
   });
 
-  it('registers the first local user', async () => {
+  it('registers the first local user, wrapped in the response envelope', async () => {
     const response = await registerUser();
 
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ email: credentials.email });
-    expect(response.body.passwordHash).toBeUndefined();
-    expect(response.body.password).toBeUndefined();
+    expect(response.body).toMatchObject({
+      requestSuccessful: true,
+      responseMessage: 'success',
+      responseCode: '0',
+    });
+    expect(response.body.responseBody).toMatchObject({ email: credentials.email });
+    expect(response.body.responseBody.passwordHash).toBeUndefined();
+    expect(response.body.responseBody.password).toBeUndefined();
   });
 
-  it('refuses to register a second user', async () => {
+  it('refuses to register a second user, with an error envelope', async () => {
     await registerUser({ email: 'first@example.com', password: 'correct-horse-battery-staple' }).expect(
       201,
     );
@@ -58,6 +64,12 @@ describe('Auth (e2e)', () => {
     });
 
     expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      requestSuccessful: false,
+      responseCode: '409',
+      responseBody: null,
+    });
+    expect(typeof response.body.responseMessage).toBe('string');
   });
 
   it('logs in with correct credentials and rejects wrong ones', async () => {
@@ -65,10 +77,11 @@ describe('Auth (e2e)', () => {
 
     const goodLogin = await loginUser();
     expect(goodLogin.status).toBe(200);
-    expect(typeof goodLogin.body.accessToken).toBe('string');
+    expect(typeof goodLogin.body.responseBody.accessToken).toBe('string');
 
     const badLogin = await loginUser({ email: credentials.email, password: 'wrong-password' });
     expect(badLogin.status).toBe(401);
+    expect(badLogin.body.requestSuccessful).toBe(false);
   });
 
   it('protects /auth/me and accepts a valid token', async () => {
@@ -80,9 +93,9 @@ describe('Auth (e2e)', () => {
 
     const authorized = await request(app.getHttpServer())
       .get('/auth/me')
-      .set('Authorization', `Bearer ${login.body.accessToken}`);
+      .set('Authorization', `Bearer ${login.body.responseBody.accessToken}`);
 
     expect(authorized.status).toBe(200);
-    expect(authorized.body).toMatchObject({ email: credentials.email });
+    expect(authorized.body.responseBody).toMatchObject({ email: credentials.email });
   });
 });
