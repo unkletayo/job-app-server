@@ -49,7 +49,9 @@ model SourcePosting {
 
 // The canonical, normalized Job Posting (CONTEXT.md) — one per SourcePosting
 // in this ticket; Job Cluster merging of multiple SourcePostings into one
-// Job Posting is ticket 05, not this one. Shape follows PRD §9 exactly.
+// Job Posting is ticket 05, not this one. Field set follows PRD §9, with
+// salary flattened into salaryMin/salaryMax/salaryCurrency scalars rather
+// than PRD's nested { min, max, currency } object — same data, flat columns.
 model JobPosting {
   id                      String        @id @default(uuid())
   userId                  String

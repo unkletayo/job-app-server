@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { JobPosting, Prisma, SourcePosting } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NormalizedJobFields } from './source-adapter';
+import { NormalizedJobFields, SourceReference } from './source-adapter';
 
 export interface IngestResult {
   sourcePosting: SourcePosting;
@@ -21,16 +21,14 @@ export class JobNormalizationService {
 
   async ingest(
     userId: string,
-    source: string,
-    sourceJobId: string,
+    reference: SourceReference,
     rawData: object,
     normalized: NormalizedJobFields,
   ): Promise<IngestResult> {
     const sourcePosting = await this.prisma.sourcePosting.create({
       data: {
         userId,
-        source,
-        sourceJobId,
+        ...reference,
         rawData: rawData as Prisma.InputJsonValue,
       },
     });
@@ -39,8 +37,7 @@ export class JobNormalizationService {
       data: {
         userId,
         sourcePostingId: sourcePosting.id,
-        source,
-        sourceJobId,
+        ...reference,
         ...normalized,
       },
     });

@@ -33,7 +33,7 @@ A job source with no permitted automated access — currently LinkedIn and Glass
 _Avoid_: Unsupported source, paste source (paste is the *mechanism*, not what defines the category — the definition is "no server-side request, ever," which also applies to sources that simply block fetches).
 
 **Source Adapter**:
-The isolated integration module for one job source (one per Sanctioned Source). Contains all site-specific logic — the core application never talks to a source directly.
+The isolated integration module for one job source — one per Sanctioned Source, and also one for Manual-Assist ingestion (`ManualPasteAdapter`) and generic/custom URLs (`GenericFetchAdapter`). Every adapter implements the same `JobSourceAdapter` interface regardless of source type, so the normalization pipeline and discovery scheduler never contain site-specific logic.
 _Avoid_: Connector, integration, scraper (this project does not scrape).
 
 ### Candidate

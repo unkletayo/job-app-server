@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { JobPosting } from '@prisma/client';
 import { JobNormalizationService } from '../job-normalization.service';
-import { ApplicationCapabilities, JobSourceAdapter, SearchResult } from '../source-adapter';
+import { ApplicationCapabilities, JobSourceAdapter, SearchResult, SourceReference } from '../source-adapter';
 import { SubmitManualPasteDto } from './dto/submit-manual-paste.dto';
 
 export const MANUAL_PASTE_SOURCE = 'manual_paste';
@@ -27,9 +27,9 @@ export class ManualPasteAdapter
   }
 
   async getJob(userId: string, input: SubmitManualPasteDto): Promise<JobPosting> {
-    const sourceJobId = randomUUID();
+    const reference: SourceReference = { source: MANUAL_PASTE_SOURCE, sourceJobId: randomUUID() };
 
-    const { jobPosting } = await this.normalization.ingest(userId, MANUAL_PASTE_SOURCE, sourceJobId, input, {
+    const { jobPosting } = await this.normalization.ingest(userId, reference, input, {
       company: input.company,
       title: input.title,
       description: input.description,

@@ -25,6 +25,14 @@ export interface NormalizedJobFields {
   sourceUpdatedAt: Date | null;
 }
 
+/** Identifies which source a posting came from and its id within that
+ * source. Travels together everywhere a posting is created or looked up —
+ * given its own type rather than two loose strings. */
+export interface SourceReference {
+  source: string;
+  sourceJobId: string;
+}
+
 export interface SearchResult {
   jobs: JobPosting[];
   hasMore: boolean;
