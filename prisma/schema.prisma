@@ -14,5 +14,148 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
+  candidateProfile CandidateProfile?
+  experiences      Experience[]
+  education        Education[]
+  certifications   Certification[]
+  skills           Skill[]
+  projects         Project[]
+  achievements     Achievement[]
+  links            Link[]
+
   @@map("users")
+}
+
+// The flat, singleton part of a Candidate Profile (CONTEXT.md). List-type
+// facts (experience, skills, etc.) live in their own tables below — each row
+// there is itself a piece of Candidate Evidence.
+model CandidateProfile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName            String?
+  contactEmail        String?
+  phone               String?
+  location            String?
+  workAuthorization   String?
+  professionalSummary String?
+  source              String   @default("user_profile")
+  verified            Boolean  @default(true)
+  lastUpdated         DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  @@map("candidate_profiles")
+}
+
+model Experience {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     String
+  title       String
+  location    String?
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+  source      String    @default("user_profile")
+  verified    Boolean   @default(true)
+  lastUpdated DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("experiences")
+}
+
+model Education {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institution  String
+  degree       String
+  fieldOfStudy String?
+  startDate    DateTime?
+  endDate      DateTime?
+  source       String    @default("user_profile")
+  verified     Boolean   @default(true)
+  lastUpdated  DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@map("education")
+}
+
+model Certification {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  issuer         String
+  issueDate      DateTime?
+  expirationDate DateTime?
+  source         String    @default("user_profile")
+  verified       Boolean   @default(true)
+  lastUpdated    DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+  @@map("certifications")
+}
+
+model Skill {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  source      String   @default("user_profile")
+  verified    Boolean  @default(true)
+  lastUpdated DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("skills")
+}
+
+model Project {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  technologies String[] @default([])
+  source       String   @default("user_profile")
+  verified     Boolean  @default(true)
+  lastUpdated  DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@map("projects")
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description String
+  source      String   @default("user_profile")
+  verified    Boolean  @default(true)
+  lastUpdated DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("achievements")
+}
+
+model Link {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String
+  url         String
+  source      String   @default("user_profile")
+  verified    Boolean  @default(true)
+  lastUpdated DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("links")
 }
