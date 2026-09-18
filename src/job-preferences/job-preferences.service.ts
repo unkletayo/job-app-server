@@ -18,7 +18,7 @@ export class JobPreferencesService {
     });
   }
 
-  update(userId: string, dto: UpdateJobPreferencesDto): Promise<JobPreferences> {
+  upsert(userId: string, dto: UpdateJobPreferencesDto): Promise<JobPreferences> {
     return this.prisma.jobPreferences.upsert({
       where: { userId },
       create: { ...dto, userId },

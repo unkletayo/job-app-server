@@ -117,6 +117,11 @@ describe('Job Preferences (e2e)', () => {
     expect(read.body.responseBody).toMatchObject({ targetRoles: ['Backend Engineer'], remotePreference: true });
   });
 
+  // This resource has no :id in its URL — ownership comes entirely from the
+  // JWT, so there's no request shape an "intruder" could even send to name
+  // another user's row (unlike the entry sections in ticket 02, which have
+  // a real cross-user id-guessing surface a 404 defends against). Isolation,
+  // proven here, is the correct equivalent of a rejection test for this shape.
   it('never lets one user see or change another user’s preferences', async () => {
     const ownerToken = await createUserAndToken('owner@example.com');
     const intruderToken = await createUserAndToken('intruder@example.com');

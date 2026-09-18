@@ -15,8 +15,11 @@ export class JobPreferencesController {
     return this.jobPreferencesService.findOne(user.id);
   }
 
+  // PATCH, not PUT like CandidateProfileController.upsert: every field here
+  // is genuinely optional and a request updates only the fields it sends,
+  // leaving the rest untouched — a real partial merge, not a full replace.
   @Patch()
-  update(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateJobPreferencesDto) {
-    return this.jobPreferencesService.update(user.id, dto);
+  upsert(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateJobPreferencesDto) {
+    return this.jobPreferencesService.upsert(user.id, dto);
   }
 }
