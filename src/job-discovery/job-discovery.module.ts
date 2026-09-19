@@ -3,7 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import Redis from 'ioredis';
 import { JobPostingsModule } from '../job-postings/job-postings.module';
-import { DISCOVERY_ADAPTERS } from './discoverable-source-adapter';
+import { DISCOVERY_ADAPTERS, DiscoveryAdapterRegistry } from './discoverable-source-adapter';
 import { DISCOVERY_QUEUE } from './job-discovery.constants';
 import { DiscoveryController } from './discovery.controller';
 import { DiscoveryRunnerService } from './discovery-runner.service';
@@ -12,6 +12,12 @@ import { DiscoveryRateLimiterService } from './discovery-rate-limiter.service';
 import { DiscoverySchedulerService } from './discovery-scheduler.service';
 import { DiscoverySourcesService } from './discovery-sources.service';
 import { DiscoveryProcessor } from './discovery.processor';
+import { GreenhouseClient } from './greenhouse/greenhouse-client';
+import { GreenhouseAdapter } from './greenhouse/greenhouse.adapter';
+import { LeverClient } from './lever/lever-client';
+import { LeverAdapter } from './lever/lever.adapter';
+import { WatchedCompaniesController } from './watched-companies/watched-companies.controller';
+import { WatchedCompaniesService } from './watched-companies/watched-companies.service';
 
 @Module({
   imports: [
@@ -32,15 +38,27 @@ import { DiscoveryProcessor } from './discovery.processor';
     }),
     BullModule.registerQueue({ name: DISCOVERY_QUEUE }),
   ],
-  controllers: [DiscoveryController],
+  controllers: [DiscoveryController, WatchedCompaniesController],
   providers: [
-    { provide: DISCOVERY_ADAPTERS, useValue: {} },
+    {
+      provide: DISCOVERY_ADAPTERS,
+      inject: [GreenhouseAdapter, LeverAdapter],
+      useFactory: (greenhouse: GreenhouseAdapter, lever: LeverAdapter): DiscoveryAdapterRegistry => ({
+        [greenhouse.sourceKey]: greenhouse,
+        [lever.sourceKey]: lever,
+      }),
+    },
     DiscoveryRunnerService,
     DiscoveryCycleService,
     DiscoveryRateLimiterService,
     DiscoverySchedulerService,
     DiscoverySourcesService,
     DiscoveryProcessor,
+    GreenhouseClient,
+    GreenhouseAdapter,
+    LeverClient,
+    LeverAdapter,
+    WatchedCompaniesService,
   ],
   exports: [DiscoveryRunnerService, DiscoveryCycleService],
 })

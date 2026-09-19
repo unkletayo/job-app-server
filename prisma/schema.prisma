@@ -28,6 +28,7 @@ model User {
   jobPostings      JobPosting[]
   discoverySources DiscoverySource[]
   discoveryRuns    DiscoveryRun[]
+  watchedCompanies WatchedCompany[]
 
   @@map("users")
 }
@@ -182,6 +183,29 @@ model DiscoveryRun {
   @@index([userId])
   @@index([sourceId])
   @@map("discovery_runs")
+}
+
+// A company the user wants Sanctioned Source discovery to watch (ticket 08)
+// — Greenhouse/Lever (and Ashby/SmartRecruiters, ticket 09) have no "search
+// everything" endpoint, only a per-company board/job-list API, so the user
+// tells the system which boards to poll. boardToken is that source's own
+// identifier for the company (a Greenhouse board_token, a Lever company
+// slug); label is a human company name since none of these APIs reliably
+// return one on the list-jobs response.
+model WatchedCompany {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source      String
+  boardToken  String
+  label       String
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  lastUpdated DateTime @updatedAt
+
+  @@unique([userId, source, boardToken])
+  @@index([userId])
+  @@map("watched_companies")
 }
 
 // The flat, singleton part of a Candidate Profile (CONTEXT.md). List-type
