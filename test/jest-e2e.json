@@ -8,5 +8,6 @@
   },
   "globalSetup": "<rootDir>/global-setup.js",
   "setupFiles": ["<rootDir>/setup-test-env.ts"],
-  "maxWorkers": 1
+  "maxWorkers": 1,
+  "forceExit": true
 }

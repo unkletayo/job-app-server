@@ -19,5 +19,6 @@ import { ManualPasteAdapter } from './manual-paste/manual-paste.adapter';
     RequirementExtractionService,
     ManualPasteAdapter,
   ],
+  exports: [JobNormalizationService],
 })
 export class JobPostingsModule {}

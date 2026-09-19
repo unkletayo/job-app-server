@@ -8,6 +8,10 @@ import { NormalizedJobFields, SourceReference } from './source-adapter';
 export interface IngestResult {
   sourcePosting: SourcePosting;
   jobPosting: JobPosting;
+  /** Whether this posting joined an existing Job Cluster rather than
+   * starting a new one — ticket 07's discovery run outcome (jobs merged vs.
+   * new clusters created) is the first real consumer of this. */
+  merged: boolean;
 }
 
 const SERIALIZATION_FAILURE_RETRIES = 3;
@@ -93,7 +97,7 @@ export class JobNormalizationService {
         // were extracted from.
         if (existingClusterId) {
           const jobPosting = await tx.jobPosting.findUniqueOrThrow({ where: { jobClusterId } });
-          return { sourcePosting, jobPosting };
+          return { sourcePosting, jobPosting, merged: true };
         }
 
         const jobPosting = await tx.jobPosting.create({ data: { userId, jobClusterId, ...normalized } });
@@ -109,7 +113,7 @@ export class JobNormalizationService {
           });
         }
 
-        return { sourcePosting, jobPosting };
+        return { sourcePosting, jobPosting, merged: false };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );

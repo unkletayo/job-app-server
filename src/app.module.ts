@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { CandidateProfileModule } from './candidate-profile/candidate-profile.module';
 import { JobPreferencesModule } from './job-preferences/job-preferences.module';
 import { JobPostingsModule } from './job-postings/job-postings.module';
+import { JobDiscoveryModule } from './job-discovery/job-discovery.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { JobPostingsModule } from './job-postings/job-postings.module';
     CandidateProfileModule,
     JobPreferencesModule,
     JobPostingsModule,
+    JobDiscoveryModule,
   ],
 })
 export class AppModule {}

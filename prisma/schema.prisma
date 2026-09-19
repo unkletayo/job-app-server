@@ -26,6 +26,8 @@ model User {
   sourcePostings   SourcePosting[]
   jobClusters      JobCluster[]
   jobPostings      JobPosting[]
+  discoverySources DiscoverySource[]
+  discoveryRuns    DiscoveryRun[]
 
   @@map("users")
 }
@@ -129,6 +131,57 @@ model Requirement {
 
   @@index([jobPostingId])
   @@map("requirements")
+}
+
+// A Sanctioned Source's per-user discovery configuration and incremental-
+// fetch checkpoint (CONTEXT.md's Sanctioned Source; PRD §8's schedule).
+// sourceKey identifies which JobSourceAdapter this row tracks (e.g.
+// "greenhouse", or "fake" in ticket 07's harness tests) — created lazily the
+// first time that source runs for a user, one row per (userId, sourceKey).
+model DiscoverySource {
+  id                  String         @id @default(uuid())
+  userId              String
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceKey           String
+  enabled             Boolean        @default(true)
+  intervalMinutes     Int            @default(360)
+  requestsPerMinute   Int            @default(30)
+  lastSuccessfulRunAt DateTime?
+  lastCursor          String?
+  lastSeenJobId       String?
+  createdAt           DateTime       @default(now())
+  lastUpdated         DateTime       @updatedAt
+  runs                DiscoveryRun[]
+
+  @@unique([userId, sourceKey])
+  @@index([userId])
+  @@map("discovery_sources")
+}
+
+// A single discovery run's recorded outcome (ticket 07) — jobs fetched,
+// merged into existing Job Clusters, new clusters created, and posting-level
+// extraction/ingest failures, so a scheduled run's result is queryable after
+// the fact rather than silent. status is 'running' | 'succeeded' | 'failed'.
+model DiscoveryRun {
+  id           String          @id @default(uuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceId     String
+  source       DiscoverySource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  status       String
+  startedAt    DateTime        @default(now())
+  finishedAt   DateTime?
+  jobsFetched  Int             @default(0)
+  jobsMerged   Int             @default(0)
+  jobsCreated  Int             @default(0)
+  failureCount Int             @default(0)
+  errorMessage String?
+  createdAt    DateTime        @default(now())
+  lastUpdated  DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([sourceId])
+  @@map("discovery_runs")
 }
 
 // The flat, singleton part of a Candidate Profile (CONTEXT.md). List-type
