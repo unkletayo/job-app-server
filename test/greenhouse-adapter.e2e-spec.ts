@@ -182,4 +182,29 @@ describe('Greenhouse adapter (e2e)', () => {
     expect(postings.body.responseBody).toHaveLength(1);
     expect(postings.body.responseBody[0].title).toBe('Data Engineer');
   });
+
+  it('does not poison the checkpoint by running before any board is watched', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await configureFastThrottle(token);
+
+    // No watched boards yet — should succeed as a no-op, not advance the
+    // timestamp checkpoint to "now" (see DiscoveryRunnerService/adapter
+    // comment: that would silently hide every pre-existing job once a
+    // board is watched later, since this adapter's incremental filter is
+    // purely time-based).
+    const emptyRun = await triggerRun(token);
+    expect(emptyRun.body.responseBody).toMatchObject({ status: 'succeeded', jobsFetched: 0 });
+
+    await watchBoard(token, 'acme', 'Acme Corp');
+    const oldJob = job({
+      id: 3001,
+      title: 'Legacy Engineer',
+      updated_at: '2020-01-01T00:00:00Z',
+      absolute_url: 'https://boards.greenhouse.io/acme/jobs/3001',
+    });
+    fetchJobs.mockResolvedValue([oldJob]);
+
+    const run = await triggerRun(token);
+    expect(run.body.responseBody).toMatchObject({ status: 'succeeded', jobsFetched: 1, jobsCreated: 1 });
+  });
 });

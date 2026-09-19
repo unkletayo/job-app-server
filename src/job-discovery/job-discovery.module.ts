@@ -16,6 +16,10 @@ import { GreenhouseClient } from './greenhouse/greenhouse-client';
 import { GreenhouseAdapter } from './greenhouse/greenhouse.adapter';
 import { LeverClient } from './lever/lever-client';
 import { LeverAdapter } from './lever/lever.adapter';
+import { AshbyClient } from './ashby/ashby-client';
+import { AshbyAdapter } from './ashby/ashby.adapter';
+import { SmartRecruitersClient } from './smartrecruiters/smartrecruiters-client';
+import { SmartRecruitersAdapter } from './smartrecruiters/smartrecruiters.adapter';
 import { WatchedCompaniesController } from './watched-companies/watched-companies.controller';
 import { WatchedCompaniesService } from './watched-companies/watched-companies.service';
 
@@ -42,10 +46,17 @@ import { WatchedCompaniesService } from './watched-companies/watched-companies.s
   providers: [
     {
       provide: DISCOVERY_ADAPTERS,
-      inject: [GreenhouseAdapter, LeverAdapter],
-      useFactory: (greenhouse: GreenhouseAdapter, lever: LeverAdapter): DiscoveryAdapterRegistry => ({
+      inject: [GreenhouseAdapter, LeverAdapter, AshbyAdapter, SmartRecruitersAdapter],
+      useFactory: (
+        greenhouse: GreenhouseAdapter,
+        lever: LeverAdapter,
+        ashby: AshbyAdapter,
+        smartrecruiters: SmartRecruitersAdapter,
+      ): DiscoveryAdapterRegistry => ({
         [greenhouse.sourceKey]: greenhouse,
         [lever.sourceKey]: lever,
+        [ashby.sourceKey]: ashby,
+        [smartrecruiters.sourceKey]: smartrecruiters,
       }),
     },
     DiscoveryRunnerService,
@@ -58,6 +69,10 @@ import { WatchedCompaniesService } from './watched-companies/watched-companies.s
     GreenhouseAdapter,
     LeverClient,
     LeverAdapter,
+    AshbyClient,
+    AshbyAdapter,
+    SmartRecruitersClient,
+    SmartRecruitersAdapter,
     WatchedCompaniesService,
   ],
   exports: [DiscoveryRunnerService, DiscoveryCycleService],

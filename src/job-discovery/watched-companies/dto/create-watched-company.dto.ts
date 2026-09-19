@@ -1,6 +1,6 @@
 import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 
-export const WATCHABLE_SOURCES = ['greenhouse', 'lever'] as const;
+export const WATCHABLE_SOURCES = ['greenhouse', 'lever', 'ashby', 'smartrecruiters'] as const;
 
 export class CreateWatchedCompanyDto {
   @IsIn(WATCHABLE_SOURCES)

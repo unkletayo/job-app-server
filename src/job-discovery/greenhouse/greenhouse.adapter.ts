@@ -37,6 +37,14 @@ export class GreenhouseAdapter implements DiscoverableSourceAdapter {
       where: { userId, source: this.sourceKey, enabled: true },
     });
 
+    // No boards to query — leave the checkpoint untouched rather than
+    // advancing it to "now". Otherwise a board added later would have every
+    // one of its existing (older) jobs silently filtered out forever, since
+    // this adapter's incremental filter is purely time-based.
+    if (boards.length === 0) {
+      return { postings: [], nextCheckpoint: checkpoint, hasMore: false };
+    }
+
     const since = checkpoint.cursor ? new Date(checkpoint.cursor) : null;
     const postings: DiscoveredPosting[] = [];
     let latestSeenJobId = checkpoint.lastSeenJobId;
