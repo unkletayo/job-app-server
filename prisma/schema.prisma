@@ -93,6 +93,9 @@ model JobPosting {
   salaryCurrency          String?
   seniority               String?
   skills                  String[]   @default([])
+  // Populated by adapters (or left empty, e.g. ManualPasteAdapter today) —
+  // not the structured Requirement records below. Relation named
+  // `extractedRequirements` to avoid colliding with this pre-existing field.
   requirements            String[]   @default([])
   preferredQualifications String[]   @default([])
   educationRequirements   String[]   @default([])
@@ -103,9 +106,29 @@ model JobPosting {
   sourceUpdatedAt         DateTime?
   lastUpdated             DateTime   @updatedAt
   createdAt               DateTime   @default(now())
+  extractedRequirements   Requirement[]
 
   @@index([userId])
   @@map("job_postings")
+}
+
+// A single skill, qualification, or expectation extracted from a Job
+// Posting's description (CONTEXT.md's Requirement). Produced once, when the
+// Job Posting is first created — a merged cluster reuses the existing Job
+// Posting (see JobNormalizationService) so its Requirements aren't
+// re-extracted. category is one of RequirementCategory (ticket 06); kept as
+// a plain string, same convention as `source`/`provenance` fields elsewhere
+// in this schema rather than a Prisma enum.
+model Requirement {
+  id           String     @id @default(uuid())
+  jobPostingId String
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  category     String
+  text         String
+  createdAt    DateTime   @default(now())
+
+  @@index([jobPostingId])
+  @@map("requirements")
 }
 
 // The flat, singleton part of a Candidate Profile (CONTEXT.md). List-type

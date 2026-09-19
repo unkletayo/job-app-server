@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JobPosting, Prisma, SourcePosting } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JobClusterService } from './job-cluster.service';
+import { RequirementExtractionService } from './requirement-extraction.service';
 import { NormalizedJobFields, SourceReference } from './source-adapter';
 
 export interface IngestResult {
@@ -25,6 +26,7 @@ export class JobNormalizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobClusterService: JobClusterService,
+    private readonly requirementExtraction: RequirementExtractionService,
   ) {}
 
   async ingest(
@@ -85,10 +87,27 @@ export class JobNormalizationService {
 
         // Merging into an existing cluster reuses its canonical Job Posting
         // unchanged — refreshing it from the newer posting's data is a later
-        // concern, not this ticket's.
-        const jobPosting = existingClusterId
-          ? await tx.jobPosting.findUniqueOrThrow({ where: { jobClusterId } })
-          : await tx.jobPosting.create({ data: { userId, jobClusterId, ...normalized } });
+        // concern, not this ticket's. Requirement extraction (ticket 06)
+        // follows the same rule: it only runs for a newly created Job
+        // Posting, since a merge doesn't change the description Requirements
+        // were extracted from.
+        if (existingClusterId) {
+          const jobPosting = await tx.jobPosting.findUniqueOrThrow({ where: { jobClusterId } });
+          return { sourcePosting, jobPosting };
+        }
+
+        const jobPosting = await tx.jobPosting.create({ data: { userId, jobClusterId, ...normalized } });
+
+        const extracted = this.requirementExtraction.extract(normalized.description);
+        if (extracted.length > 0) {
+          await tx.requirement.createMany({
+            data: extracted.map((requirement) => ({
+              jobPostingId: jobPosting.id,
+              category: requirement.category,
+              text: requirement.text,
+            })),
+          });
+        }
 
         return { sourcePosting, jobPosting };
       },

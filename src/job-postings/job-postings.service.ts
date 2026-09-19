@@ -13,7 +13,7 @@ export class JobPostingsService {
   async findOne(userId: string, id: string) {
     const jobPosting = await this.prisma.jobPosting.findFirst({
       where: { id, userId },
-      include: { jobCluster: { include: { sourcePostings: true } } },
+      include: { jobCluster: { include: { sourcePostings: true } }, extractedRequirements: true },
     });
     if (!jobPosting) {
       throw new NotFoundException('Job posting not found.');
