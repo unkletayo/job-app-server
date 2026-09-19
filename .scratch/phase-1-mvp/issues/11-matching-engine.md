@@ -4,10 +4,25 @@
 
 **Blocked by:** 02 (Candidate Profile/Evidence), 03 (Job Preferences), 06 (Requirements to match against). Does not depend on live discovery (07–10) — can be exercised against manually-pasted Job Postings alone.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Hard filters (work authorization, employment type, excluded company/title/keyword from Job Preferences) run first; a Job Posting failing any hard filter is excluded outright, not merely down-scored
-- [ ] Job Postings passing hard filters get a structured Match Score computed from Requirement/Evidence overlap
-- [ ] The Match Score response includes: matched Requirements with their supporting Candidate Evidence, and Gaps (Requirements with no matching Evidence)
-- [ ] Only verified Candidate Evidence (`verified: true`) contributes to a match — per `CONTEXT.md`'s Candidate Evidence definition
-- [ ] e2e tests (Seam 1) cover: a hard-filter exclusion case, a high-match case with cited evidence, and a case with explicit Gaps reported
+- [x] Hard filters (work authorization, employment type, excluded company/title/keyword from Job Preferences) run first; a Job Posting failing any hard filter is excluded outright, not merely down-scored
+- [x] Job Postings passing hard filters get a structured Match Score computed from Requirement/Evidence overlap
+- [x] The Match Score response includes: matched Requirements with their supporting Candidate Evidence, and Gaps (Requirements with no matching Evidence)
+- [x] Only verified Candidate Evidence (`verified: true`) contributes to a match — per `CONTEXT.md`'s Candidate Evidence definition
+- [x] e2e tests (Seam 1) cover: a hard-filter exclusion case, a high-match case with cited evidence, and a case with explicit Gaps reported
+
+## Comments
+
+New top-level `src/matching/` module (`MatchingModule`, per spec's module list treating Matching as its own concern, separate from Job Postings/Normalization). `MatchingService.score(userId, jobPosting)` is computed at view time, not persisted — cheap to recompute, always reflects the current Candidate Profile/Job Preferences instead of going stale. Wired into `JobPostingsController.findOne` (`GET /job-postings/:id` now returns `{...jobPosting, matchScore}`), matching spec story 23 ("open a Job Posting's detail view and see its Match Score breakdown, Gaps").
+
+**Work authorization hard filter — a real data gap, resolved narrowly rather than invented broadly**: nothing in the normalized `JobPosting` schema or ticket 06's Requirement categories captures a job's stated authorization/sponsorship policy, and `CandidateProfile.workAuthorization` is free text with no established vocabulary (tickets 02/03 shipped it that way). Rather than invent a constrained vocabulary retroactively or add a new Requirement category (which would mean reopening ticket 06's already-shipped extractor for a single ticket 11 need), the filter is scoped to the one unambiguous, low-risk signal actually available: if the candidate's `workAuthorization` text mentions "sponsor" or "visa" (they need one) **and** the posting's description explicitly states it won't sponsor (a short, explicit phrase list — "no sponsorship", "unable to sponsor", etc.), exclude. Missing or non-matching data never excludes — a hard filter's failure mode of "wrongly hides a job" is worse than "misses an exclusion it could have caught," per PRD §31's "do not manufacture confidence."
+
+**Scoring**: `score = round(100 * matchedRequirements / totalRequirements)`; `null` (not 0) when a posting has zero extracted Requirements — reporting a number with nothing behind it is exactly what PRD §31 warns against. Evidence gathered from all six Candidate Profile entry types (Skill, Certification, Education, Experience, Project, Achievement), filtered to `verified: true` only, flattened to plain text for matching. Two match strategies, chosen by category because ticket 06's extractor produces different text shapes per category:
+- **Atomic short text** (`required_skill`, `preferred_skill`, `keyword`) — bidirectional whole-word/substring containment (`shortTextMatches`).
+- **Full-sentence text** (`education`, `certification`, `responsibility`) — shared-significant-word overlap (`wordOverlapMatches`), since bidirectional containment rarely lines up between two independently-written sentences. No stemming/synonyms (0003-deterministic-first-matching forbids semantic matching) — "AWS certification" only matches evidence containing the literal word "aws", not "AWS Certified Solutions Architect" if the shared word were absent.
+- **`experience`** — special-cased: ticket 06's extractor only ever produces this category from a parseable "N years ... experience" pattern, so the requirement's number is compared against the candidate's total verified Experience duration (summed date ranges), not text-matched at all.
+
+New e2e file `test/matching.e2e-spec.ts`: hard-filter exclusion (excluded company, plus additional coverage for employment type, excluded title, negative keyword, and the work-authorization/sponsorship case), a fully-matched high-score case with per-Requirement cited evidence, a mixed case with explicit Gaps alongside real matches, and confirmation that an unverified Skill is never cited as evidence. Full e2e suite: 62/62 across 14 files. `tsc --noEmit` and `nest build` clean.
+
+**Live-verified** against the running Docker `api` container using a real, previously-ingested Job Posting (from ticket 06/07's live Greenhouse testing): with an empty Candidate Profile, all 13 extracted Requirements correctly reported as Gaps (score 0); after adding real Skill/Experience evidence via the live API, the score rose to 38 with 5 correctly-cited reasons (matching skills, matching experience duration) and 8 remaining Gaps — confirming the whole pipeline (extraction → evidence gathering → matching → scoring) works against genuine data, not just crafted fixtures. Test evidence was removed from the shared dev user afterward.

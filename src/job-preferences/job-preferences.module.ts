@@ -5,5 +5,6 @@ import { JobPreferencesService } from './job-preferences.service';
 @Module({
   controllers: [JobPreferencesController],
   providers: [JobPreferencesService],
+  exports: [JobPreferencesService],
 })
 export class JobPreferencesModule {}

@@ -11,8 +11,10 @@ import { ManualPasteAdapter } from './manual-paste/manual-paste.adapter';
 import { GenericFetchController } from './generic-fetch/generic-fetch.controller';
 import { GenericFetchAdapter } from './generic-fetch/generic-fetch.adapter';
 import { GenericFetchClient } from './generic-fetch/generic-fetch-client';
+import { MatchingModule } from '../matching/matching.module';
 
 @Module({
+  imports: [MatchingModule],
   controllers: [
     JobPostingsController,
     JobClustersController,
