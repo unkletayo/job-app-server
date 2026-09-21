@@ -108,6 +108,38 @@ describe('Requirement extraction (e2e)', () => {
     expect(byCategory('keyword').length).toBeGreaterThan(0);
   });
 
+  it('extracts clean Requirements from entity-encoded HTML, the way Greenhouse delivers descriptions', async () => {
+    const token = await createUserAndToken('owner@example.com');
+
+    const encoded =
+      '&lt;p&gt;&lt;strong&gt;Requirements&lt;/strong&gt;&lt;/p&gt;' +
+      '&lt;ul&gt;&lt;li&gt;5+ years of experience with Python &amp;amp; PostgreSQL&lt;/li&gt;' +
+      '&lt;li&gt;Bachelor&amp;#39;s degree in Computer Science&lt;/li&gt;&lt;/ul&gt;';
+
+    const requirements = await submitAndFetch(token, encoded);
+    const texts = requirements.map((r) => r.text);
+
+    // No markup or entity debris in any extracted text...
+    for (const text of texts) {
+      expect(text).not.toMatch(/&lt;|&gt;|&amp;|&#39;|<\/?[a-z]/i);
+    }
+    // ...and the real requirements are recovered, as separate lines.
+    expect(requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'experience',
+          text: '5+ years of experience with Python & PostgreSQL',
+        }),
+        expect.objectContaining({
+          category: 'education',
+          text: "Bachelor's degree in Computer Science",
+        }),
+        expect.objectContaining({ category: 'required_skill', text: 'python' }),
+        expect.objectContaining({ category: 'required_skill', text: 'postgresql' }),
+      ]),
+    );
+  });
+
   it('treats prompt-injection-style content as inert data — no extraction behavior changes', async () => {
     const token = await createUserAndToken('owner@example.com');
 

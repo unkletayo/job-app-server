@@ -1,4 +1,5 @@
 import { CandidateProfile, JobPosting, JobPreferences } from '@prisma/client';
+import { htmlToPlainText } from '../job-postings/text-normalization';
 
 /** Phrases a posting uses to state it won't sponsor work authorization.
  * Deterministic keyword matching, same style as ticket 06's requirement
@@ -37,7 +38,7 @@ export function evaluateHardFilters(
     const candidateNeedsSponsorship =
       authorization.includes('sponsor') || authorization.includes('visa');
     if (candidateNeedsSponsorship) {
-      const description = normalize(jobPosting.description);
+      const description = normalize(htmlToPlainText(jobPosting.description));
       const statesNoSponsorship = NO_SPONSORSHIP_PHRASES.some((phrase) =>
         description.includes(phrase),
       );
@@ -82,7 +83,9 @@ export function evaluateHardFilters(
     return { excluded: true, reason: `Title matches excluded title "${excludedTitle}".` };
   }
 
-  const searchableText = normalize(`${jobPosting.title} ${jobPosting.description}`);
+  const searchableText = normalize(
+    `${jobPosting.title} ${htmlToPlainText(jobPosting.description)}`,
+  );
   const negativeKeyword = preferences.negativeKeywords.find((keyword) =>
     searchableText.includes(normalize(keyword)),
   );

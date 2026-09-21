@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { htmlToPlainText } from './text-normalization';
 
 export type RequirementCategory =
   | 'required_skill'
@@ -85,7 +86,7 @@ function dedupe(entries: ExtractedRequirement[]): ExtractedRequirement[] {
 @Injectable()
 export class RequirementExtractionService {
   extract(description: string): ExtractedRequirement[] {
-    const lines = splitIntoLines(description);
+    const lines = splitIntoLines(htmlToPlainText(description));
     const results: ExtractedRequirement[] = [];
     let section: Section = null;
 
