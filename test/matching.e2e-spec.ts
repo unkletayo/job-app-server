@@ -255,6 +255,33 @@ describe('Matching engine (e2e)', () => {
     expect(reason.confidence).toBe('medium');
   });
 
+  it('does not match a responsibility on a single shared word', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await addExperience(token, 3); // "Backend Engineer — Prior Co — Built backend REST services."
+
+    const id = await submitJobPosting(token, {
+      description: [
+        'Responsibilities:',
+        'Manage vendor contracts and negotiate pricing with backend suppliers.',
+        'Build and maintain backend REST services for payments.',
+      ].join('\n'),
+    });
+    const detail = await getDetail(token, id);
+
+    const reasonTexts = detail.matchScore.reasons
+      .filter((r: { category: string }) => r.category === 'responsibility')
+      .map((r: { requirement: string }) => r.requirement);
+    const gapTexts = detail.matchScore.gaps
+      .filter((g: { category: string }) => g.category === 'responsibility')
+      .map((g: { requirement: string }) => g.requirement);
+
+    // Shares only "backend" with the candidate's experience — not enough.
+    expect(gapTexts).toContain('Manage vendor contracts and negotiate pricing with backend suppliers.');
+    expect(reasonTexts).not.toContain('Manage vendor contracts and negotiate pricing with backend suppliers.');
+    // Shares "backend", "REST" and "services" — a real overlap.
+    expect(reasonTexts).toContain('Build and maintain backend REST services for payments.');
+  });
+
   it('withholds the score, with an explanation, when too few Requirements can be scored', async () => {
     const token = await createUserAndToken('owner@example.com');
     await addSkill(token, 'Python');

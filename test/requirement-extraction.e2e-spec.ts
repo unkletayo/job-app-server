@@ -18,12 +18,13 @@ describe('Requirement extraction (e2e)', () => {
     return jwt.sign({ sub: user.id, email: user.email });
   }
 
-  async function submitAndFetch(token: string, description: string) {
+  // A distinct title keeps Job Clustering from merging separate submissions.
+  async function submitAndFetch(token: string, description: string, title = 'Backend Engineer') {
     const submit = await request(app.getHttpServer())
       .post('/job-postings/manual-paste')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        title: 'Backend Engineer',
+        title,
         company: 'Acme',
         location: 'Remote',
         description,
@@ -138,6 +139,48 @@ describe('Requirement extraction (e2e)', () => {
         expect.objectContaining({ category: 'required_skill', text: 'postgresql' }),
       ]),
     );
+  });
+
+  it('does not read ordinary words as the go, rest or express skills', async () => {
+    const token = await createUserAndToken('owner@example.com');
+
+    const description = [
+      'Requirements:',
+      'Go beyond what is asked and own the outcome.',
+      'You are a go-getter who can lead our go-to-market planning.',
+      'This role is part of our Go To Market function.',
+      'Be our Go-getter and the Go-to person for the team.',
+      'Comfortable working with the rest of the team.',
+      'Please express interest with your resume.',
+      'Express written consent is required for background checks.',
+    ].join('\n');
+
+    const requirements = await submitAndFetch(token, description);
+    const skillTexts = requirements
+      .filter((r) => r.category === 'required_skill' || r.category === 'keyword')
+      .map((r) => r.text);
+
+    expect(skillTexts).not.toContain('go');
+    expect(skillTexts).not.toContain('rest');
+    expect(skillTexts).not.toContain('express');
+  });
+
+  it.each([
+    ['go', 'Proficiency in Go and Python.'],
+    ['go', 'Go, Rust or Java experience.'],
+    ['go', 'Backend services in Go/Rust.'],
+    ['rest', 'Design RESTful services.'],
+    ['rest', 'Build REST APIs.'],
+    ['rest', 'Experience with rest apis.'],
+    ['express', 'Node.js with Express.'],
+    ['express', 'Familiar with Express.js.'],
+  ])('still recognizes %s when it names the technology: %s', async (skill, line) => {
+    const token = await createUserAndToken('owner@example.com');
+
+    const requirements = await submitAndFetch(token, `Requirements:\n${line}`, `Engineer for ${line}`);
+    const skillTexts = requirements.filter((r) => r.category === 'required_skill').map((r) => r.text);
+
+    expect(skillTexts).toContain(skill);
   });
 
   describe('POST /job-postings/re-extract', () => {

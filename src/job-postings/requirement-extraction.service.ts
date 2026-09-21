@@ -28,6 +28,39 @@ const SKILL_VOCABULARY = [
   'sass', 'webpack', 'jenkins', 'ansible', 'microservices',
 ];
 
+function stripBullet(line: string): string {
+  return line.replace(/^[-•*\s]+/, '');
+}
+
+/**
+ * Skills whose name is also an everyday English word ("go beyond", "the rest
+ * of the team", "express interest") need more than a whole-word match, or
+ * every posting that uses the word reads as demanding the skill. Each
+ * detector only fires on the tech usage.
+ */
+const AMBIGUOUS_SKILL_DETECTORS: Record<string, (line: string) => boolean> = {
+  go: (line) => {
+    const text = stripBullet(line);
+    // A sentence-initial "Go beyond ..." is capitalised by grammar, not
+    // because it names the language; only a leading "Go," / "Go/" or a lone
+    // "Go" does.
+    const startsLanguageList = /^Go\s*(?:[,/]|$)/.test(text);
+    const scanned = startsLanguageList ? text : text.replace(/^Go\b/, '');
+    // "Go-getter", "Go to market" and "the Go-to person" are phrases, not the
+    // language.
+    return /\bGo\b(?!-?\s*(?:[Gg]etter|[Tt]o\b))/.test(scanned);
+  },
+  rest: (line) => /\bREST\b/.test(line) || /\brestful\b/i.test(line) || /\brest[\s-]+apis?\b/i.test(line),
+  express: (line) =>
+    /\bexpress\.?js\b/i.test(line) || (/\bExpress\b/.test(line) && /\bnode(?:\.?js)?\b/i.test(line)),
+};
+
+function mentionsSkill(line: string, skill: string): boolean {
+  const detector = AMBIGUOUS_SKILL_DETECTORS[skill];
+  if (detector) return detector(line);
+  return new RegExp(`\\b${skill.replace(/[.+]/g, '\\$&')}\\b`, 'i').test(line);
+}
+
 const DEGREE_VOCABULARY = [
   "bachelor's degree", 'bachelor degree', 'bachelors degree', "master's degree", 'master degree',
   'masters degree', 'phd', 'ph.d', 'doctorate', "associate's degree", 'associate degree', 'mba',
@@ -125,15 +158,14 @@ export class RequirementExtractionService {
       }
 
       for (const skill of SKILL_VOCABULARY) {
-        const pattern = new RegExp(`\\b${skill.replace(/[.+]/g, '\\$&')}\\b`, 'i');
-        if (pattern.test(line)) {
+        if (mentionsSkill(line, skill)) {
           const skillCategory = section === 'preferred' ? 'preferred_skill' : 'required_skill';
           results.push({ category: skillCategory, text: skill });
           results.push({ category: 'keyword', text: skill });
         }
       }
 
-      const firstWord = line.replace(/^[-•*\s]+/, '').split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
+      const firstWord = stripBullet(line).split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
       if (section === 'responsibility' || (firstWord && RESPONSIBILITY_VERBS.includes(firstWord))) {
         results.push({ category: 'responsibility', text: line });
       }

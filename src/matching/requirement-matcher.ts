@@ -8,6 +8,14 @@ const STOPWORDS = new Set([
 
 const YEARS_PATTERN = /(\d{1,2})\+?\s*(?:-\s*\d{1,2}\s*)?\+?\s*years?/i;
 
+/** Shared significant words needed for a word-overlap match. A
+ * responsibility is a whole sentence, so one shared word ("backend", "team",
+ * "build") says almost nothing — it takes two to call it evidence. Education
+ * and certification text is short and specific, so one shared word ("AWS",
+ * "Computer Science") still counts. */
+const MIN_SHARED_WORDS = 1;
+const MIN_SHARED_RESPONSIBILITY_WORDS = 2;
+
 function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -38,11 +46,15 @@ function shortTextMatches(requirementText: string, evidenceText: string): boolea
 /** Word-overlap match — used for sentence-length requirement text
  * (responsibilities, education) where bidirectional containment rarely
  * lines up. Deterministic, not semantic: shared significant words only,
- * no synonym/embedding matching (0003-deterministic-first-matching). */
-function wordOverlapMatches(requirementText: string, evidenceText: string): boolean {
-  const words = significantWords(requirementText);
+ * no synonym/embedding matching (0003-deterministic-first-matching).
+ * `minShared` distinct words must appear in the evidence (or all of them,
+ * when the requirement has fewer than that). */
+function wordOverlapMatches(requirementText: string, evidenceText: string, minShared: number): boolean {
+  const words = [...new Set(significantWords(requirementText))];
+  if (words.length === 0) return false;
   const evidence = normalize(evidenceText);
-  return words.some((word) => containsWholeWord(evidence, word));
+  const shared = words.filter((word) => containsWholeWord(evidence, word)).length;
+  return shared >= Math.min(minShared, words.length);
 }
 
 function parseRequiredYears(requirementText: string): number | null {
@@ -141,9 +153,11 @@ export function matchRequirements(
       requirement.category === 'responsibility' ||
       requirement.category === 'education' ||
       requirement.category === 'certification';
+    const minShared =
+      requirement.category === 'responsibility' ? MIN_SHARED_RESPONSIBILITY_WORDS : MIN_SHARED_WORDS;
     const match = evidence.find((item) =>
       useWordOverlap
-        ? wordOverlapMatches(requirement.text, item.text)
+        ? wordOverlapMatches(requirement.text, item.text, minShared)
         : shortTextMatches(requirement.text, item.text),
     );
 
