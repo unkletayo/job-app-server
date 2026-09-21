@@ -1,5 +1,5 @@
 import { Requirement } from '@prisma/client';
-import { EvidenceItem, MatchGap, MatchReason } from './types';
+import { EvidenceItem, ExperienceEvidence, MatchGap, MatchReason } from './types';
 
 const STOPWORDS = new Set([
   'with', 'and', 'the', 'for', 'from', 'that', 'this', 'have', 'will', 'your',
@@ -50,34 +50,78 @@ function parseRequiredYears(requirementText: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/** Words that make up the *shape* of an experience requirement rather than
+ * its field ("5+ years of relevant experience in ...") — removed so what's
+ * left is the domain the years have to have been spent in. */
+const GENERIC_EXPERIENCE_WORDS = new Set([
+  'years', 'year', 'experience', 'relevant', 'work', 'working', 'including', 'plus', 'preferred',
+  'strong', 'proven', 'professional', 'related', 'role', 'roles', 'similar', 'minimum', 'least',
+  'more', 'equivalent', 'field', 'demonstrated', 'hands', 'solid', 'prior', 'industry',
+]);
+
+function experienceDomainWords(requirementText: string): string[] {
+  return significantWords(requirementText).filter(
+    (word) => !GENERIC_EXPERIENCE_WORDS.has(word) && !/^\d+$/.test(word),
+  );
+}
+
 /**
  * Matches a Job Posting's extracted Requirements (ticket 06) against the
  * candidate's verified Evidence (CONTEXT.md), per
  * 0003-deterministic-first-matching — keyword/word-overlap only, no
- * embeddings. `experienceYears` is the candidate's total verified years of
- * work experience (summed elsewhere from Experience date ranges), used
- * specifically for `experience`-category Requirements, which ticket 06's
- * extractor only ever produces from a "N years ... experience" pattern.
+ * embeddings.
+ *
+ * `experience`-category Requirements (which ticket 06's extractor only ever
+ * produces from a "N years ... experience" pattern) are checked against
+ * *relevant* work history: only Experience entries whose text shares a
+ * domain word with the requirement count toward its years. A requirement
+ * with no domain words at all ("5+ years of experience") falls back to all
+ * verified experience. Counting total years regardless of field is what let
+ * 11 years of backend work "satisfy" a 7+ year law-firm requirement.
+ *
+ * Extraction emits every skill twice, as a `required_skill`/`preferred_skill`
+ * and again as a `keyword`; a keyword that repeats a skill is skipped here so
+ * one skill isn't counted (and explained) twice.
  */
 export function matchRequirements(
-  requirements: Requirement[],
+  allRequirements: Requirement[],
   evidence: EvidenceItem[],
-  experienceYears: number,
+  experiences: ExperienceEvidence[],
 ): { reasons: MatchReason[]; gaps: MatchGap[] } {
   const reasons: MatchReason[] = [];
   const gaps: MatchGap[] = [];
 
+  const skillTexts = new Set(
+    allRequirements
+      .filter((r) => r.category === 'required_skill' || r.category === 'preferred_skill')
+      .map((r) => normalize(r.text)),
+  );
+  const requirements = allRequirements.filter(
+    (r) => !(r.category === 'keyword' && skillTexts.has(normalize(r.text))),
+  );
+
   for (const requirement of requirements) {
     if (requirement.category === 'experience') {
       const requiredYears = parseRequiredYears(requirement.text);
-      if (requiredYears !== null && experienceYears >= requiredYears) {
+      const domainWords = experienceDomainWords(requirement.text);
+      const relevant =
+        domainWords.length === 0
+          ? experiences
+          : experiences.filter((entry) =>
+              domainWords.some((word) => containsWholeWord(normalize(entry.text), word)),
+            );
+      const relevantYears = Math.floor(relevant.reduce((total, entry) => total + entry.years, 0));
+
+      if (requiredYears !== null && relevant.length > 0 && relevantYears >= requiredYears) {
         reasons.push({
           requirementId: requirement.id,
           category: requirement.category,
           requirement: requirement.text,
-          evidence: `${experienceYears} year(s) of verified work experience`,
+          evidence: `${relevantYears} year(s) of verified work experience: ${relevant
+            .map((entry) => entry.label)
+            .join('; ')}`,
           evidenceType: 'experience_duration',
-          confidence: 'high',
+          confidence: domainWords.length === 0 ? 'medium' : 'high',
         });
       } else {
         gaps.push({

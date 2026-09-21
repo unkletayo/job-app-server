@@ -76,14 +76,16 @@ describe('Dashboard (e2e)', () => {
   it('lists Job Postings with their Match Score attached, sorted by score descending', async () => {
     const token = await createUserAndToken('owner@example.com');
     await addSkill(token, 'Python');
+    await addSkill(token, 'PostgreSQL');
+    await addSkill(token, 'Docker');
 
     const lowId = await submitJobPosting(token, {
       title: 'Low Match Role',
-      description: 'Requirements:\nStrong experience with Kubernetes.',
+      description: 'Requirements:\nExperience with Kubernetes, Terraform and Ansible.',
     });
     const highId = await submitJobPosting(token, {
       title: 'High Match Role',
-      description: 'Requirements:\nStrong experience with Python.',
+      description: 'Requirements:\nStrong experience with Python.\nExperience with PostgreSQL and Docker.',
     });
 
     const response = await listJobs(token);
@@ -113,14 +115,16 @@ describe('Dashboard (e2e)', () => {
   it('the high-match view (minScore) surfaces only postings at or above the threshold', async () => {
     const token = await createUserAndToken('owner@example.com');
     await addSkill(token, 'Python');
+    await addSkill(token, 'PostgreSQL');
+    await addSkill(token, 'Docker');
 
     const lowId = await submitJobPosting(token, {
       title: 'Low Match Role',
-      description: 'Requirements:\nStrong experience with Kubernetes.',
+      description: 'Requirements:\nExperience with Kubernetes, Terraform and Ansible.',
     });
     const highId = await submitJobPosting(token, {
       title: 'High Match Role',
-      description: 'Requirements:\nStrong experience with Python.',
+      description: 'Requirements:\nStrong experience with Python.\nExperience with PostgreSQL and Docker.',
     });
 
     const response = await listJobs(token, '?minScore=50');

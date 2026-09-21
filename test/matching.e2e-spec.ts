@@ -221,6 +221,68 @@ describe('Matching engine (e2e)', () => {
     expect(experienceReason).toBeTruthy();
   });
 
+  it('only counts experience in the requirement’s own field toward its years', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await addExperience(token, 11); // 11 years of backend work
+
+    const id = await submitJobPosting(token, {
+      description: 'Requirements:\n7+ years of experience at a law firm or government agency.',
+    });
+    const detail = await getDetail(token, id);
+
+    const experienceGap = detail.matchScore.gaps.find(
+      (g: { category: string }) => g.category === 'experience',
+    );
+    expect(experienceGap).toBeTruthy();
+    expect(
+      detail.matchScore.reasons.some((r: { category: string }) => r.category === 'experience'),
+    ).toBe(false);
+  });
+
+  it('falls back to total experience for a requirement that names no field', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await addExperience(token, 6);
+
+    const id = await submitJobPosting(token, {
+      description: 'Requirements:\n5+ years of experience.',
+    });
+    const detail = await getDetail(token, id);
+
+    const reason = detail.matchScore.reasons.find(
+      (r: { category: string }) => r.category === 'experience',
+    );
+    expect(reason).toBeTruthy();
+    expect(reason.confidence).toBe('medium');
+  });
+
+  it('withholds the score, with an explanation, when too few Requirements can be scored', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await addSkill(token, 'Python');
+
+    // One skill extracts as a skill Requirement *and* a duplicate keyword;
+    // the duplicate must not be counted, leaving a single scorable Requirement.
+    const id = await submitJobPosting(token, {
+      description: 'Requirements:\nStrong experience with Python.',
+    });
+    const detail = await getDetail(token, id);
+
+    expect(detail.matchScore.score).toBeNull();
+    expect(detail.matchScore.scoreNote).toContain('Only 1');
+    expect(detail.matchScore.reasons).toHaveLength(1);
+    expect(detail.matchScore.gaps).toEqual([]);
+  });
+
+  it('reads entity-encoded posting text when applying the no-sponsorship filter', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await setProfile(token, { workAuthorization: 'Requires visa sponsorship' });
+
+    const id = await submitJobPosting(token, {
+      description: '&lt;p&gt;We won&#39;t sponsor visas for this role.&lt;/p&gt;',
+    });
+    const detail = await getDetail(token, id);
+    expect(detail.matchScore.excluded).toBe(true);
+  });
+
   it('does not use unverified Candidate Evidence to satisfy a Requirement', async () => {
     const token = await createUserAndToken('owner@example.com');
     await addSkill(token, 'Python');

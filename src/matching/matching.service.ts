@@ -4,15 +4,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JobPreferencesService } from '../job-preferences/job-preferences.service';
 import { evaluateHardFilters } from './hard-filters';
 import { matchRequirements } from './requirement-matcher';
-import { EvidenceItem, MatchScoreResult } from './types';
+import { EvidenceItem, ExperienceEvidence, MatchScoreResult } from './types';
 
 const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
+
+/** Below this many scorable Requirements a percentage is mostly noise —
+ * one matched Requirement out of one is "100%". The score is withheld
+ * (with a note) rather than reported; reasons and gaps are still returned,
+ * so nothing about what matched is hidden. */
+const MIN_SCORABLE_REQUIREMENTS = 3;
 
 interface MatchingContext {
   preferences: JobPreferences | null;
   candidateProfile: CandidateProfile | null;
   evidence: EvidenceItem[];
-  experienceYears: number;
+  experiences: ExperienceEvidence[];
 }
 
 /**
@@ -88,13 +94,19 @@ export class MatchingService {
       ...achievements.map((a): EvidenceItem => ({ type: 'achievement', text: a.description })),
     ];
 
-    const experienceYears = experiences.reduce((total, experience) => {
+    const experienceEntries: ExperienceEvidence[] = experiences.map((experience) => {
       const end = experience.endDate ?? new Date();
       const years = (end.getTime() - experience.startDate.getTime()) / MS_PER_YEAR;
-      return total + Math.max(years, 0);
-    }, 0);
+      return {
+        label: `${experience.title} — ${experience.company}`,
+        text: [experience.title, experience.company, experience.description]
+          .filter(Boolean)
+          .join(' — '),
+        years: Math.max(years, 0),
+      };
+    });
 
-    return { preferences, candidateProfile, evidence, experienceYears: Math.floor(experienceYears) };
+    return { preferences, candidateProfile, evidence, experiences: experienceEntries };
   }
 
   private scoreWithContext(
@@ -107,22 +119,46 @@ export class MatchingService {
       context.candidateProfile,
     );
     if (excluded) {
-      return { excluded: true, exclusionReason: reason, score: null, reasons: [], gaps: [] };
+      return {
+        excluded: true,
+        exclusionReason: reason,
+        score: null,
+        scoreNote: null,
+        reasons: [],
+        gaps: [],
+      };
     }
 
     if (jobPosting.extractedRequirements.length === 0) {
-      return { excluded: false, exclusionReason: null, score: null, reasons: [], gaps: [] };
+      return {
+        excluded: false,
+        exclusionReason: null,
+        score: null,
+        scoreNote: 'No Requirements could be extracted from this posting, so there is nothing to score against.',
+        reasons: [],
+        gaps: [],
+      };
     }
 
     const { reasons, gaps } = matchRequirements(
       jobPosting.extractedRequirements,
       context.evidence,
-      context.experienceYears,
+      context.experiences,
     );
 
-    const total = jobPosting.extractedRequirements.length;
-    const score = Math.round((reasons.length / total) * 100);
+    const scorable = reasons.length + gaps.length;
+    if (scorable < MIN_SCORABLE_REQUIREMENTS) {
+      return {
+        excluded: false,
+        exclusionReason: null,
+        score: null,
+        scoreNote: `Only ${scorable} scorable Requirement(s) were found (at least ${MIN_SCORABLE_REQUIREMENTS} needed), so a percentage would be misleading.`,
+        reasons,
+        gaps,
+      };
+    }
 
-    return { excluded: false, exclusionReason: null, score, reasons, gaps };
+    const score = Math.round((reasons.length / scorable) * 100);
+    return { excluded: false, exclusionReason: null, score, scoreNote: null, reasons, gaps };
   }
 }
