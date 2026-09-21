@@ -6,6 +6,7 @@ import { CandidateProfileModule } from './candidate-profile/candidate-profile.mo
 import { JobPreferencesModule } from './job-preferences/job-preferences.module';
 import { JobPostingsModule } from './job-postings/job-postings.module';
 import { JobDiscoveryModule } from './job-discovery/job-discovery.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { JobDiscoveryModule } from './job-discovery/job-discovery.module';
     JobPreferencesModule,
     JobPostingsModule,
     JobDiscoveryModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

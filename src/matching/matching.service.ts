@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { JobPosting, Requirement } from '@prisma/client';
+import { CandidateProfile, JobPosting, JobPreferences, Requirement } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JobPreferencesService } from '../job-preferences/job-preferences.service';
 import { evaluateHardFilters } from './hard-filters';
@@ -7,6 +7,13 @@ import { matchRequirements } from './requirement-matcher';
 import { EvidenceItem, MatchScoreResult } from './types';
 
 const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
+
+interface MatchingContext {
+  preferences: JobPreferences | null;
+  candidateProfile: CandidateProfile | null;
+  evidence: EvidenceItem[];
+  experienceYears: number;
+}
 
 /**
  * Computes a deterministic Match Score for a Job Posting against the
@@ -28,22 +35,27 @@ export class MatchingService {
     userId: string,
     jobPosting: JobPosting & { extractedRequirements: Requirement[] },
   ): Promise<MatchScoreResult> {
-    const [preferences, candidateProfile] = await Promise.all([
-      this.jobPreferences.findOne(userId),
-      this.prisma.candidateProfile.findUnique({ where: { userId } }),
-    ]);
+    const context = await this.loadContext(userId);
+    return this.scoreWithContext(jobPosting, context);
+  }
 
-    const { excluded, reason } = evaluateHardFilters(jobPosting, preferences, candidateProfile);
-    if (excluded) {
-      return { excluded: true, exclusionReason: reason, score: null, reasons: [], gaps: [] };
-    }
+  /** Same scoring as `score`, but loads Job Preferences/Candidate
+   * Profile/Evidence once and reuses them across every posting — the
+   * dashboard (ticket 12) lists many postings per request, and none of
+   * that context depends on which posting is being scored. */
+  async scoreMany(
+    userId: string,
+    jobPostings: (JobPosting & { extractedRequirements: Requirement[] })[],
+  ): Promise<MatchScoreResult[]> {
+    const context = await this.loadContext(userId);
+    return jobPostings.map((jobPosting) => this.scoreWithContext(jobPosting, context));
+  }
 
-    if (jobPosting.extractedRequirements.length === 0) {
-      return { excluded: false, exclusionReason: null, score: null, reasons: [], gaps: [] };
-    }
-
-    const [skills, certifications, education, experiences, projects, achievements] =
+  private async loadContext(userId: string): Promise<MatchingContext> {
+    const [preferences, candidateProfile, skills, certifications, education, experiences, projects, achievements] =
       await Promise.all([
+        this.jobPreferences.findOne(userId),
+        this.prisma.candidateProfile.findUnique({ where: { userId } }),
         this.prisma.skill.findMany({ where: { userId, verified: true } }),
         this.prisma.certification.findMany({ where: { userId, verified: true } }),
         this.prisma.education.findMany({ where: { userId, verified: true } }),
@@ -82,10 +94,30 @@ export class MatchingService {
       return total + Math.max(years, 0);
     }, 0);
 
+    return { preferences, candidateProfile, evidence, experienceYears: Math.floor(experienceYears) };
+  }
+
+  private scoreWithContext(
+    jobPosting: JobPosting & { extractedRequirements: Requirement[] },
+    context: MatchingContext,
+  ): MatchScoreResult {
+    const { excluded, reason } = evaluateHardFilters(
+      jobPosting,
+      context.preferences,
+      context.candidateProfile,
+    );
+    if (excluded) {
+      return { excluded: true, exclusionReason: reason, score: null, reasons: [], gaps: [] };
+    }
+
+    if (jobPosting.extractedRequirements.length === 0) {
+      return { excluded: false, exclusionReason: null, score: null, reasons: [], gaps: [] };
+    }
+
     const { reasons, gaps } = matchRequirements(
       jobPosting.extractedRequirements,
-      evidence,
-      Math.floor(experienceYears),
+      context.evidence,
+      context.experienceYears,
     );
 
     const total = jobPosting.extractedRequirements.length;
