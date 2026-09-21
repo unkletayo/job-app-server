@@ -29,8 +29,10 @@ function decodeEntities(input: string): string {
  * "description" is: Ashby/Lever give plain text; SmartRecruiters gives real
  * HTML; Greenhouse gives *entity-encoded* HTML (`&lt;li&gt;…&lt;/li&gt;`),
  * so the first decode pass turns encoded tags back into tags and the tag
- * pass then removes them. The stored description is left untouched (raw
- * data is never rewritten) — this only shapes what gets read from it.
+ * pass then removes them. Ingest stores the result as the Job Posting's
+ * description (the SourcePosting keeps the raw markup); the extractor and
+ * hard filters still call this too, so rows ingested before that change
+ * behave the same until they are re-extracted.
  */
 export function htmlToPlainText(input: string): string {
   const withTags = decodeEntities(input);

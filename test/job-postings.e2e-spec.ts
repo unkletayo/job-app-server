@@ -78,6 +78,33 @@ describe('Job Postings — manual paste (e2e)', () => {
     expect(sourcePostings[0].source).toBe('manual_paste');
   });
 
+  it('stores the Job Posting description as plain text while the raw Source Posting keeps the original markup', async () => {
+    const token = await createUserAndToken('owner@example.com');
+
+    // Greenhouse delivers descriptions as entity-encoded HTML.
+    const encodedPaste = {
+      ...paste,
+      description:
+        '&lt;p&gt;Build &amp;amp; run services.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Python&lt;/li&gt;&lt;li&gt;Bachelor&amp;#39;s degree&lt;/li&gt;&lt;/ul&gt;',
+    };
+
+    const submit = await request(app.getHttpServer())
+      .post('/job-postings/manual-paste')
+      .set('Authorization', `Bearer ${token}`)
+      .send(encodedPaste);
+    expect(submit.status).toBe(201);
+    const id = submit.body.responseBody.id as string;
+
+    const detail = await request(app.getHttpServer())
+      .get(`/job-postings/${id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(detail.body.responseBody.description).toBe(
+      "Build & run services.\n\nPython\n\nBachelor's degree",
+    );
+    expect(detail.body.responseBody.jobCluster.sourcePostings[0].rawData).toEqual(encodedPaste);
+  });
+
   it('stores and normalizes prompt-injection-style content as inert data', async () => {
     const token = await createUserAndToken('owner@example.com');
 

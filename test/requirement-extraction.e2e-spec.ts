@@ -140,6 +140,120 @@ describe('Requirement extraction (e2e)', () => {
     );
   });
 
+  describe('POST /job-postings/re-extract', () => {
+    // A distinct title per posting keeps Job Clustering from merging them.
+    async function postStaleJobPosting(token: string, title = 'Backend Engineer'): Promise<string> {
+      const submit = await request(app.getHttpServer())
+        .post('/job-postings/manual-paste')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          title,
+          company: 'Acme',
+          location: 'Remote',
+          description: 'placeholder',
+        });
+      const id = submit.body.responseBody.id as string;
+
+      // Recreates what a posting ingested before the HTML-decoding fixes
+      // looks like: entity-encoded description and Requirements extracted
+      // from it back then.
+      await prisma.jobPosting.update({
+        where: { id },
+        data: {
+          description:
+            '&lt;p&gt;&lt;strong&gt;Requirements&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Strong experience with Python and PostgreSQL&lt;/li&gt;&lt;/ul&gt;',
+        },
+      });
+      await prisma.requirement.deleteMany({ where: { jobPostingId: id } });
+      await prisma.requirement.create({
+        data: { jobPostingId: id, category: 'responsibility', text: '&lt;li&gt;stale debris&lt;/li&gt;' },
+      });
+      return id;
+    }
+
+    it('re-runs extraction over the current user’s postings, replacing stale Requirements and the encoded description', async () => {
+      const token = await createUserAndToken('owner@example.com');
+      const id = await postStaleJobPosting(token);
+
+      const rerun = await request(app.getHttpServer())
+        .post('/job-postings/re-extract')
+        .set('Authorization', `Bearer ${token}`);
+      expect(rerun.status).toBe(200);
+      expect(rerun.body.responseBody).toEqual({ reExtracted: 1 });
+
+      const detail = await request(app.getHttpServer())
+        .get(`/job-postings/${id}`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(detail.body.responseBody.description).toBe(
+        'Requirements\n\nStrong experience with Python and PostgreSQL',
+      );
+      const requirements = detail.body.responseBody.extractedRequirements as {
+        category: string;
+        text: string;
+      }[];
+      expect(requirements.map((r) => r.text)).not.toContain('&lt;li&gt;stale debris&lt;/li&gt;');
+      expect(requirements).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ category: 'required_skill', text: 'python' }),
+          expect.objectContaining({ category: 'required_skill', text: 'postgresql' }),
+        ]),
+      );
+    });
+
+    it('leaves other users’ postings alone', async () => {
+      const ownerToken = await createUserAndToken('owner@example.com');
+      const otherToken = await createUserAndToken('other@example.com');
+      await postStaleJobPosting(ownerToken);
+      const otherId = await postStaleJobPosting(otherToken);
+
+      const rerun = await request(app.getHttpServer())
+        .post('/job-postings/re-extract')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(rerun.body.responseBody).toEqual({ reExtracted: 1 });
+
+      const other = await request(app.getHttpServer())
+        .get(`/job-postings/${otherId}`)
+        .set('Authorization', `Bearer ${otherToken}`);
+      expect(other.body.responseBody.description).toMatch(/^&lt;p&gt;/);
+      expect(other.body.responseBody.extractedRequirements.map((r: { text: string }) => r.text)).toEqual([
+        '&lt;li&gt;stale debris&lt;/li&gt;',
+      ]);
+    });
+
+    it('does not duplicate Requirements when re-extractions overlap', async () => {
+      const token = await createUserAndToken('owner@example.com');
+      const ids: string[] = [];
+      for (let index = 0; index < 20; index++) {
+        ids.push(await postStaleJobPosting(token, `Backend Engineer ${index}`));
+      }
+
+      const responses = await Promise.all(
+        [1, 2, 3].map(() =>
+          request(app.getHttpServer()).post('/job-postings/re-extract').set('Authorization', `Bearer ${token}`),
+        ),
+      );
+      for (const response of responses) {
+        expect(response.status).toBe(200);
+      }
+
+      for (const id of ids) {
+        const detail = await request(app.getHttpServer())
+          .get(`/job-postings/${id}`)
+          .set('Authorization', `Bearer ${token}`);
+        const keys = (detail.body.responseBody.extractedRequirements as { category: string; text: string }[]).map(
+          (r) => `${r.category}:${r.text}`,
+        );
+        expect(keys.length).toBeGreaterThan(0);
+        expect(new Set(keys).size).toBe(keys.length);
+      }
+    });
+
+    it('rejects requests with no token', async () => {
+      const response = await request(app.getHttpServer()).post('/job-postings/re-extract');
+      expect(response.status).toBe(401);
+    });
+  });
+
   it('treats prompt-injection-style content as inert data — no extraction behavior changes', async () => {
     const token = await createUserAndToken('owner@example.com');
 

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JobClusterService } from './job-cluster.service';
 import { RequirementExtractionService } from './requirement-extraction.service';
 import { NormalizedJobFields, SourceReference } from './source-adapter';
+import { htmlToPlainText } from './text-normalization';
 
 export interface IngestResult {
   sourcePosting: SourcePosting;
@@ -100,22 +101,77 @@ export class JobNormalizationService {
           return { sourcePosting, jobPosting, merged: true };
         }
 
-        const jobPosting = await tx.jobPosting.create({ data: { userId, jobClusterId, ...normalized } });
-
-        const extracted = this.requirementExtraction.extract(normalized.description);
-        if (extracted.length > 0) {
-          await tx.requirement.createMany({
-            data: extracted.map((requirement) => ({
-              jobPostingId: jobPosting.id,
-              category: requirement.category,
-              text: requirement.text,
-            })),
-          });
-        }
+        // The Job Posting is the normalized record, so its description is
+        // stored as plain text; the SourcePosting above keeps the original
+        // markup untouched.
+        const jobPosting = await tx.jobPosting.create({
+          data: { userId, jobClusterId, ...normalized, description: htmlToPlainText(normalized.description) },
+        });
+        await this.saveRequirements(tx, jobPosting.id, jobPosting.description);
 
         return { sourcePosting, jobPosting, merged: false };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  /**
+   * Re-normalizes the description and rebuilds the Requirements of every one
+   * of the user's Job Postings. Requirements are otherwise only extracted at
+   * first ingest, so postings ingested before an extraction fix keep stale
+   * Requirements (and, for Greenhouse, an entity-encoded description) until
+   * this runs.
+   *
+   * One transaction per posting, so a failure part-way leaves earlier
+   * postings done and the run safe to repeat. `htmlToPlainText` is not
+   * idempotent for text that legitimately contains entity-like sequences
+   * (`&amp;lt;` written out literally), which each run would decode further.
+   */
+  async reExtractAll(userId: string): Promise<{ reExtracted: number }> {
+    const jobPostings = await this.prisma.jobPosting.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+
+    let reExtracted = 0;
+    for (const { id } of jobPostings) {
+      await this.prisma.$transaction(async (tx) => {
+        // Lock the row before touching its Requirements: two overlapping
+        // runs would otherwise interleave delete/create and leave duplicates.
+        // The description is read after the lock so a waiting run sees what
+        // the run before it wrote.
+        const locked = await tx.$queryRaw<{ description: string }[]>`
+          SELECT description FROM job_postings WHERE id = ${id} FOR UPDATE`;
+        if (locked.length === 0) return; // deleted since the list was read
+
+        const { description } = locked[0];
+        const plainText = htmlToPlainText(description);
+        if (plainText !== description) {
+          await tx.jobPosting.update({ where: { id }, data: { description: plainText } });
+        }
+        await tx.requirement.deleteMany({ where: { jobPostingId: id } });
+        await this.saveRequirements(tx, id, plainText);
+        reExtracted++;
+      });
+    }
+
+    return { reExtracted };
+  }
+
+  private async saveRequirements(
+    tx: Prisma.TransactionClient,
+    jobPostingId: string,
+    description: string,
+  ): Promise<void> {
+    const extracted = this.requirementExtraction.extract(description);
+    if (extracted.length > 0) {
+      await tx.requirement.createMany({
+        data: extracted.map((requirement) => ({
+          jobPostingId,
+          category: requirement.category,
+          text: requirement.text,
+        })),
+      });
+    }
   }
 }

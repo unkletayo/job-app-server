@@ -117,7 +117,7 @@ describe('Greenhouse adapter (e2e)', () => {
       postings.body.responseBody.find((p: { title: string }) => p.title === title);
     expect(byTitle('Backend Engineer')).toMatchObject({
       company: 'Acme Corp',
-      description: '<p>Build APIs</p>',
+      description: 'Build APIs',
       location: ['Remote'],
       applicationUrl: 'https://boards.greenhouse.io/acme/jobs/1001',
     });

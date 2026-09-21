@@ -116,10 +116,11 @@ model JobPosting {
 }
 
 // A single skill, qualification, or expectation extracted from a Job
-// Posting's description (CONTEXT.md's Requirement). Produced once, when the
-// Job Posting is first created — a merged cluster reuses the existing Job
+// Posting's description (CONTEXT.md's Requirement). Produced when the Job
+// Posting is first created — a merged cluster reuses the existing Job
 // Posting (see JobNormalizationService) so its Requirements aren't
-// re-extracted. category is one of RequirementCategory (ticket 06); kept as
+// re-extracted — and rebuilt by POST /job-postings/re-extract.
+// category is one of RequirementCategory (ticket 06); kept as
 // a plain string, same convention as `source`/`provenance` fields elsewhere
 // in this schema rather than a Prisma enum.
 model Requirement {

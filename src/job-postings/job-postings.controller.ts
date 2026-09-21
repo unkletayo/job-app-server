@@ -1,8 +1,9 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.service';
 import { MatchingService } from '../matching/matching.service';
+import { JobNormalizationService } from './job-normalization.service';
 import { JobPostingsService } from './job-postings.service';
 
 @Controller('job-postings')
@@ -10,12 +11,21 @@ import { JobPostingsService } from './job-postings.service';
 export class JobPostingsController {
   constructor(
     private readonly jobPostingsService: JobPostingsService,
+    private readonly jobNormalization: JobNormalizationService,
     private readonly matching: MatchingService,
   ) {}
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser) {
     return this.jobPostingsService.findAll(user.id);
+  }
+
+  // Synchronous, like discovery's forced run: extraction is deterministic
+  // and fast, so the caller sees the outcome in one request.
+  @Post('re-extract')
+  @HttpCode(HttpStatus.OK)
+  reExtract(@CurrentUser() user: AuthenticatedUser) {
+    return this.jobNormalization.reExtractAll(user.id);
   }
 
   // Match Score is computed at view time, not persisted — it's cheap to
