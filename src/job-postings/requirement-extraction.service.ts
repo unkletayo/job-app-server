@@ -55,7 +55,15 @@ const AMBIGUOUS_SKILL_DETECTORS: Record<string, (line: string) => boolean> = {
     /\bexpress\.?js\b/i.test(line) || (/\bExpress\b/.test(line) && /\bnode(?:\.?js)?\b/i.test(line)),
 };
 
-function mentionsSkill(line: string, skill: string): boolean {
+/**
+ * Whether `line` mentions `skill` in a tech sense rather than as an everyday
+ * word. Exported so the matcher (`requirement-matcher.ts`) can apply the
+ * same ambiguous-word gate to free-text Candidate Evidence (experience,
+ * project, achievement descriptions) that extraction applies to posting
+ * text — otherwise a Requirement for "go" or "rest" is satisfied by an
+ * unrelated "go"/"rest" in prose evidence.
+ */
+export function mentionsSkill(line: string, skill: string): boolean {
   const detector = AMBIGUOUS_SKILL_DETECTORS[skill];
   if (detector) return detector(line);
   return new RegExp(`\\b${skill.replace(/[.+]/g, '\\$&')}\\b`, 'i').test(line);

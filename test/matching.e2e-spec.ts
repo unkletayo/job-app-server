@@ -67,7 +67,7 @@ describe('Matching engine (e2e)', () => {
       .send({ name, issuer });
   }
 
-  async function addExperience(token: string, yearsAgo: number) {
+  async function addExperience(token: string, yearsAgo: number, description = 'Built backend REST services.') {
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - yearsAgo);
     await request(app.getHttpServer())
@@ -77,7 +77,7 @@ describe('Matching engine (e2e)', () => {
         company: 'Prior Co',
         title: 'Backend Engineer',
         startDate: startDate.toISOString(),
-        description: 'Built backend REST services.',
+        description,
       });
   }
 
@@ -308,6 +308,48 @@ describe('Matching engine (e2e)', () => {
     });
     const detail = await getDetail(token, id);
     expect(detail.matchScore.excluded).toBe(true);
+  });
+
+  it('does not let an unrelated "go" or "rest" in prose Evidence satisfy a skill Requirement', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await addExperience(
+      token,
+      3,
+      'Helped the team go live on schedule and handled the rest of the launch checklist.',
+    );
+
+    const id = await submitJobPosting(token, {
+      description: [
+        'Requirements:',
+        'Strong experience with Go.',
+        'Strong experience with REST APIs.',
+        "Bachelor's degree in Computer Science required.",
+      ].join('\n'),
+    });
+    const detail = await getDetail(token, id);
+
+    expect(detail.matchScore.gaps.some((g: { requirement: string }) => g.requirement === 'go')).toBe(true);
+    expect(detail.matchScore.gaps.some((g: { requirement: string }) => g.requirement === 'rest')).toBe(true);
+    expect(detail.matchScore.reasons.some((r: { requirement: string }) => r.requirement === 'go')).toBe(false);
+    expect(detail.matchScore.reasons.some((r: { requirement: string }) => r.requirement === 'rest')).toBe(false);
+  });
+
+  it('still matches a skill Requirement against a genuine Go/REST mention in prose Evidence', async () => {
+    const token = await createUserAndToken('owner@example.com');
+    await addExperience(token, 3, 'Built REST APIs in Go for the payments team.');
+
+    const id = await submitJobPosting(token, {
+      description: [
+        'Requirements:',
+        'Strong experience with Go.',
+        'Strong experience with REST APIs.',
+        "Bachelor's degree in Computer Science required.",
+      ].join('\n'),
+    });
+    const detail = await getDetail(token, id);
+
+    expect(detail.matchScore.reasons.some((r: { requirement: string }) => r.requirement === 'go')).toBe(true);
+    expect(detail.matchScore.reasons.some((r: { requirement: string }) => r.requirement === 'rest')).toBe(true);
   });
 
   it('does not use unverified Candidate Evidence to satisfy a Requirement', async () => {

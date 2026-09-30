@@ -1,5 +1,13 @@
 import { Requirement } from '@prisma/client';
+import { mentionsSkill } from '../job-postings/requirement-extraction.service';
 import { EvidenceItem, ExperienceEvidence, MatchGap, MatchReason } from './types';
+
+/** Evidence types that are free-text prose (as opposed to a short, atomic
+ * field the user entered directly, like a Skill or Certification name) —
+ * where an ambiguous skill word ("go", "rest", "express") needs the same
+ * tech-context gate extraction applies, or ordinary English ("go live",
+ * "the rest of the team") reads as evidence of the skill. */
+const PROSE_EVIDENCE_TYPES = new Set<EvidenceItem['type']>(['experience', 'project', 'achievement']);
 
 const STOPWORDS = new Set([
   'with', 'and', 'the', 'for', 'from', 'that', 'this', 'have', 'will', 'your',
@@ -36,11 +44,24 @@ function containsWholeWord(haystack: string, word: string): boolean {
 /** Bidirectional whole-word/substring match — used for short, atomic
  * requirement text (a skill name, a keyword, a certification) where either
  * side could be the more specific string ("python" in "Python, Go" or
- * "AWS Certified Solutions Architect" containing "AWS certification"). */
-function shortTextMatches(requirementText: string, evidenceText: string): boolean {
+ * "AWS Certified Solutions Architect" containing "AWS certification").
+ *
+ * Against prose evidence (an experience/project/achievement description),
+ * a bare whole-word match lets an unrelated "go"/"rest"/"express" satisfy
+ * the Requirement (extraction's false-positive fix only covers posting
+ * text, not Evidence) — so prose evidence goes through the same
+ * `mentionsSkill` tech-context gate extraction uses instead. Evidence the
+ * user entered directly as a short field (Skill/Certification/Education
+ * name) is trusted as-is: it's already atomic, not a sentence to disambiguate.
+ */
+function shortTextMatches(requirementText: string, evidence: EvidenceItem): boolean {
   const req = normalize(requirementText);
-  const evidence = normalize(evidenceText);
-  return containsWholeWord(evidence, req) || containsWholeWord(req, evidence);
+  const evidenceText = normalize(evidence.text);
+  if (containsWholeWord(req, evidenceText)) return true;
+  if (PROSE_EVIDENCE_TYPES.has(evidence.type)) {
+    return mentionsSkill(evidence.text, req);
+  }
+  return containsWholeWord(evidenceText, req);
 }
 
 /** Word-overlap match — used for sentence-length requirement text
@@ -158,7 +179,7 @@ export function matchRequirements(
     const match = evidence.find((item) =>
       useWordOverlap
         ? wordOverlapMatches(requirement.text, item.text, minShared)
-        : shortTextMatches(requirement.text, item.text),
+        : shortTextMatches(requirement.text, item),
     );
 
     if (match) {

@@ -295,6 +295,45 @@ describe('Requirement extraction (e2e)', () => {
       const response = await request(app.getHttpServer()).post('/job-postings/re-extract');
       expect(response.status).toBe(401);
     });
+
+    it('is idempotent across repeated re-extracts, even for doubly-encoded entity sequences', async () => {
+      const token = await createUserAndToken('owner@example.com');
+
+      // A posting that legitimately quotes doubly-escaped HTML syntax
+      // (common in postings that mention markup literally) — decoding it
+      // once fully resolves it; a non-idempotent decoder would keep eating
+      // into it on every subsequent re-extract.
+      const submit = await request(app.getHttpServer())
+        .post('/job-postings/manual-paste')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          title: 'Backend Engineer',
+          company: 'Acme',
+          location: 'Remote',
+          description: 'Example syntax: &amp;lt;div&amp;gt;\nRequirements:\nStrong experience with Python.',
+        });
+      const id = submit.body.responseBody.id as string;
+      const afterIngest = submit.body.responseBody.description as string;
+
+      const first = await request(app.getHttpServer())
+        .post('/job-postings/re-extract')
+        .set('Authorization', `Bearer ${token}`);
+      expect(first.body.responseBody).toEqual({ reExtracted: 1 });
+      const afterFirst = (
+        await request(app.getHttpServer()).get(`/job-postings/${id}`).set('Authorization', `Bearer ${token}`)
+      ).body.responseBody.description as string;
+
+      const second = await request(app.getHttpServer())
+        .post('/job-postings/re-extract')
+        .set('Authorization', `Bearer ${token}`);
+      expect(second.body.responseBody).toEqual({ reExtracted: 1 });
+      const afterSecond = (
+        await request(app.getHttpServer()).get(`/job-postings/${id}`).set('Authorization', `Bearer ${token}`)
+      ).body.responseBody.description as string;
+
+      expect(afterFirst).toBe(afterIngest);
+      expect(afterSecond).toBe(afterIngest);
+    });
   });
 
   it('treats prompt-injection-style content as inert data — no extraction behavior changes', async () => {

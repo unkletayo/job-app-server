@@ -123,9 +123,10 @@ export class JobNormalizationService {
    * this runs.
    *
    * One transaction per posting, so a failure part-way leaves earlier
-   * postings done and the run safe to repeat. `htmlToPlainText` is not
-   * idempotent for text that legitimately contains entity-like sequences
-   * (`&amp;lt;` written out literally), which each run would decode further.
+   * postings done and the run safe to repeat. `htmlToPlainText` decodes to a
+   * fixpoint, so re-running it here on an already-normalized description is
+   * a no-op — safe to call on every re-extract regardless of how many times
+   * the posting has been through this before.
    */
   async reExtractAll(userId: string): Promise<{ reExtracted: number }> {
     const jobPostings = await this.prisma.jobPosting.findMany({

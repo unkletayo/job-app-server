@@ -7,7 +7,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: ' ',
 };
 
-function decodeEntities(input: string): string {
+function decodeEntitiesOnce(input: string): string {
   return input.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity: string) => {
     if (entity[0] === '#') {
       const codePoint =
@@ -21,6 +21,26 @@ function decodeEntities(input: string): string {
     }
     return NAMED_ENTITIES[entity.toLowerCase()] ?? match;
   });
+}
+
+// Multiply-encoded input (`&amp;lt;`) needs more than one decode pass to
+// reach plain text. Looping to a fixpoint — instead of the fixed two passes
+// this function used to make — is what makes `htmlToPlainText` idempotent:
+// re-running it on its own output (as `reExtractAll` does) is a no-op
+// regardless of how many levels the original encoding had, so text that
+// legitimately contains entity-like sequences doesn't get decoded further
+// on every re-extract. Bounded so a pathological chain can't loop forever;
+// five levels is far more than any real source encodes.
+const MAX_DECODE_PASSES = 5;
+
+function decodeEntities(input: string): string {
+  let current = input;
+  for (let pass = 0; pass < MAX_DECODE_PASSES; pass++) {
+    const next = decodeEntitiesOnce(current);
+    if (next === current) return next;
+    current = next;
+  }
+  return current;
 }
 
 /**
